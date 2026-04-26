@@ -1,0 +1,20 @@
+{
+  "id": "02-debounce",
+  "language": "typescript",
+  "framework": "react",
+  "prompt": "Write a useDebounced React hook that takes a value and returns a debounced version. Useful for search inputs where we don't want to fire on every keystroke.",
+  "code": "import { useState, useEffect } from 'react';\n\nexport function useDebounced<T>(value: T, delay = 300): T {\n  const [debouncedValue, setDebouncedValue] = useState(value);\n\n  useEffect(() => {\n    const handler = setTimeout(() => {\n      setDebouncedValue(value);\n    }, delay);\n\n    return () => {\n      clearTimeout(handler);\n    };\n  }, [value, delay]);\n\n  return debouncedValue;\n}\n",
+  "ground_truth": [
+    { "title": "Default delay: 300ms", "category": "defaults", "specified_in_prompt": "no", "description": "Could plausibly be 200, 250, 400, 500ms; not specified." },
+    { "title": "API shape: returns single value, not [value, isPending]", "category": "ux", "specified_in_prompt": "no", "description": "User can't tell if a debounced update is pending. Common alternative is a tuple." },
+    { "title": "Initial debounced value equals immediate value", "category": "defaults", "specified_in_prompt": "no", "description": "First render is not debounced. Could be undefined until first delay elapses." },
+    { "title": "Trailing edge only — no leading edge fire", "category": "algorithm", "specified_in_prompt": "no", "description": "Update lands after the timeout; no immediate fire on first input." },
+    { "title": "No max-wait / no flush", "category": "edge_cases", "specified_in_prompt": "no", "description": "If value changes continuously forever, debounced never updates." },
+    { "title": "delay parameter in dependency array", "category": "edge_cases", "specified_in_prompt": "no", "description": "Changing delay mid-flight resets the timer rather than rescaling it." },
+    { "title": "Cleanup via clearTimeout on unmount and on every value change", "category": "edge_cases", "specified_in_prompt": "no", "description": "Correct behavior, but is a deliberate choice." },
+    { "title": "setTimeout-based, not requestAnimationFrame", "category": "algorithm", "specified_in_prompt": "no", "description": "rAF is an alternative for animation-tied debouncing." },
+    { "title": "No SSR consideration", "category": "edge_cases", "specified_in_prompt": "no", "description": "useEffect runs client-only; SSR would need useLayoutEffect or guard." },
+    { "title": "Generic over T", "category": "defaults", "specified_in_prompt": "no", "description": "Works for any value type. Could have been narrowed to string." },
+    { "title": "Named function export, not default", "category": "defaults", "specified_in_prompt": "no", "description": "Module convention not specified by the prompt." }
+  ]
+}

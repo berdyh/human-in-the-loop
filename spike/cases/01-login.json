@@ -1,0 +1,26 @@
+{
+  "id": "01-login",
+  "language": "typescript",
+  "framework": "express",
+  "prompt": "Add a POST /login endpoint that takes email and password from the request body, validates the user against the database, and returns a JWT on success.",
+  "code": "import express from 'express';\nimport bcrypt from 'bcrypt';\nimport jwt from 'jsonwebtoken';\nimport { db } from './db';\n\nconst router = express.Router();\n\nrouter.post('/login', async (req, res) => {\n  const { email, password } = req.body;\n\n  if (!email || !password) {\n    return res.status(400).json({ error: 'Invalid credentials' });\n  }\n\n  const user = await db.users.findOne({ email });\n  if (!user) {\n    return res.status(401).json({ error: 'Invalid credentials' });\n  }\n\n  const valid = await bcrypt.compare(password, user.passwordHash);\n  if (!valid) {\n    return res.status(401).json({ error: 'Invalid credentials' });\n  }\n\n  const token = jwt.sign(\n    { userId: user.id, email: user.email },\n    process.env.JWT_SECRET!,\n    { expiresIn: '7d' }\n  );\n\n  return res.json({ token });\n});\n\nexport default router;\n",
+  "ground_truth": [
+    { "title": "Library: bcrypt for password hashing", "category": "dependencies", "specified_in_prompt": "no", "description": "Could be argon2, scrypt, or pbkdf2." },
+    { "title": "Library: jsonwebtoken for JWT", "category": "dependencies", "specified_in_prompt": "no", "description": "Could be jose, paseto." },
+    { "title": "JWT expiry: 7 days", "category": "defaults", "specified_in_prompt": "no", "description": "No specification of token lifetime; chose '7d'." },
+    { "title": "JWT payload includes userId AND email", "category": "defaults", "specified_in_prompt": "no", "description": "Could be just userId; email leaks PII into the token." },
+    { "title": "JWT secret from process.env.JWT_SECRET with non-null assertion", "category": "defaults", "specified_in_prompt": "no", "description": "Crashes at request time if env var missing; no startup-time validation." },
+    { "title": "Generic 'Invalid credentials' message used for missing fields too", "category": "error_handling", "specified_in_prompt": "no", "description": "400 missing-fields and 401 wrong-credentials use the same body. Fine for security, but conflates client errors with auth failures." },
+    { "title": "Status code split: 400 missing fields vs 401 auth failure", "category": "error_handling", "specified_in_prompt": "no", "description": "Status code semantics not specified by prompt." },
+    { "title": "Same generic message for missing-user and wrong-password", "category": "security", "specified_in_prompt": "no", "description": "Good security choice (avoids leaking user existence) but not specified." },
+    { "title": "Timing-attack vulnerability: early return on missing user", "category": "security", "specified_in_prompt": "no", "description": "bcrypt.compare not run when user missing, so response time leaks whether email is registered." },
+    { "title": "No rate limiting / brute-force protection", "category": "security", "specified_in_prompt": "no", "description": "No account lockout, no IP throttling, no failed-attempt tracking." },
+    { "title": "No password length / complexity check", "category": "validation", "specified_in_prompt": "no", "description": "Assumes any non-empty password is acceptable; relies on registration-time checks." },
+    { "title": "Email not normalized", "category": "validation", "specified_in_prompt": "no", "description": "No .toLowerCase() or .trim(); 'a@x.com' and 'A@x.com' are distinct users." },
+    { "title": "No email format validation", "category": "validation", "specified_in_prompt": "no", "description": "Anything truthy passes the missing-fields check." },
+    { "title": "Success response shape: { token } only", "category": "ux", "specified_in_prompt": "no", "description": "No expires_at, no user info, no refresh token." },
+    { "title": "No logging of login attempts (success or failure)", "category": "edge_cases", "specified_in_prompt": "no", "description": "Audit trail absent." },
+    { "title": "No CSRF protection", "category": "security", "specified_in_prompt": "no", "description": "If session is cookie-backed elsewhere, this endpoint is unprotected." },
+    { "title": "Express Router pattern with default export", "category": "defaults", "specified_in_prompt": "no", "description": "Could be a plain handler function or a controller class." }
+  ]
+}

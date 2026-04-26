@@ -1,0 +1,23 @@
+{
+  "id": "03-retry",
+  "language": "typescript",
+  "framework": "node",
+  "prompt": "Write a retry helper. It takes an async function and retries it on failure with exponential backoff.",
+  "code": "export async function retry<T>(\n  fn: () => Promise<T>,\n  options: { maxAttempts?: number; baseDelayMs?: number } = {}\n): Promise<T> {\n  const { maxAttempts = 3, baseDelayMs = 100 } = options;\n\n  let lastError: unknown;\n  for (let attempt = 0; attempt < maxAttempts; attempt++) {\n    try {\n      return await fn();\n    } catch (err) {\n      lastError = err;\n      if (attempt < maxAttempts - 1) {\n        const delay = baseDelayMs * Math.pow(2, attempt);\n        await new Promise((resolve) => setTimeout(resolve, delay));\n      }\n    }\n  }\n\n  throw lastError;\n}\n",
+  "ground_truth": [
+    { "title": "Default maxAttempts: 3", "category": "defaults", "specified_in_prompt": "no", "description": "Common default but not specified." },
+    { "title": "Default baseDelayMs: 100", "category": "defaults", "specified_in_prompt": "no", "description": "Could be 250, 500, 1000ms." },
+    { "title": "Backoff formula: base * 2^attempt", "category": "algorithm", "specified_in_prompt": "partial", "description": "Prompt says 'exponential' but doesn't specify base multiplier or starting delay." },
+    { "title": "No jitter", "category": "algorithm", "specified_in_prompt": "no", "description": "Synchronized retrying can thundering-herd a downstream service." },
+    { "title": "No max delay cap", "category": "algorithm", "specified_in_prompt": "no", "description": "With many attempts, delay grows unboundedly (100, 200, 400, 800, ... ms)." },
+    { "title": "Catches everything (no error type filter)", "category": "error_handling", "specified_in_prompt": "no", "description": "Retries on every thrown value, including programmer errors and abort signals." },
+    { "title": "No retry predicate", "category": "error_handling", "specified_in_prompt": "no", "description": "User can't say 'only retry on 5xx' or 'don't retry on 401'." },
+    { "title": "Throws only the LAST error", "category": "error_handling", "specified_in_prompt": "no", "description": "Earlier errors are discarded; could throw an AggregateError." },
+    { "title": "No abort signal / cancellation", "category": "edge_cases", "specified_in_prompt": "no", "description": "Caller cannot interrupt a sleep between attempts." },
+    { "title": "No onRetry callback / no observability hook", "category": "edge_cases", "specified_in_prompt": "no", "description": "Caller can't log attempts." },
+    { "title": "First attempt has no delay (immediate)", "category": "algorithm", "specified_in_prompt": "no", "description": "Implementation choice — alternative is to delay before every call." },
+    { "title": "Sleep via setTimeout + new Promise", "category": "defaults", "specified_in_prompt": "no", "description": "Could use timers/promises setTimeout from node:timers/promises." },
+    { "title": "options object with optional fields, destructured with defaults", "category": "ux", "specified_in_prompt": "no", "description": "API shape not specified — could be (fn, maxAttempts, baseDelayMs) positional." },
+    { "title": "lastError typed as unknown", "category": "defaults", "specified_in_prompt": "no", "description": "Modern TS choice; could be Error or any." }
+  ]
+}
