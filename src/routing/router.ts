@@ -42,7 +42,10 @@ function overlap(a: Set<string>, b: Iterable<string>): number {
 
 function globMatches(file: string, glob: string): boolean {
   const normalized = file.replace(/\\/g, '/');
-  if (glob.endsWith('/**')) return normalized.startsWith(glob.slice(0, -3));
+  if (glob.endsWith('/**')) {
+    const base = glob.slice(0, -3);
+    return normalized === base || normalized.startsWith(`${base}/`);
+  }
   if (glob.endsWith('*')) return normalized.startsWith(glob.slice(0, -1));
   return normalized === glob;
 }
@@ -133,7 +136,7 @@ export function routeContext(input: RouteContextInput): RouteContextResult {
         }
       }
       if (area && taskItem.confidence >= TASK_RELATION_THRESHOLD) {
-        area.confidence = Math.max(area.confidence, Math.min(0.78, taskItem.confidence - 0.05));
+        area.confidence = Math.max(area.confidence, Math.min(0.61, taskItem.confidence - 0.05));
         area.reason = `${area.reason}; recommended by task ${task.id}`;
       }
     }

@@ -56,7 +56,9 @@ export async function projectGitHead(root: string): Promise<string | null> {
 export async function projectChangedFiles(root: string): Promise<string[] | null> {
   try {
     await execFileAsync('git', ['rev-parse', '--is-inside-work-tree'], { cwd: root });
+    const branchDiffBase = await projectBranchDiffBase(root);
     const commands = [
+      ...(branchDiffBase ? [['diff', '--name-only', branchDiffBase, 'HEAD']] : []),
       ['diff', '--name-only'],
       ['diff', '--name-only', '--cached'],
       ['ls-files', '--others', '--exclude-standard']
@@ -69,6 +71,25 @@ export async function projectChangedFiles(root: string): Promise<string[] | null
       }
     }
     return [...files].sort();
+  } catch {
+    return null;
+  }
+}
+
+async function projectBranchDiffBase(root: string): Promise<string | null> {
+  const remoteCandidates = ['origin/main', 'origin/master'];
+  for (const candidate of remoteCandidates) {
+    try {
+      await execFileAsync('git', ['rev-parse', '--verify', candidate], { cwd: root });
+      const { stdout } = await execFileAsync('git', ['merge-base', candidate, 'HEAD'], { cwd: root });
+      return stdout.trim() || null;
+    } catch {
+      // Try the next base candidate.
+    }
+  }
+  try {
+    const { stdout } = await execFileAsync('git', ['rev-parse', '--verify', 'HEAD~1'], { cwd: root });
+    return stdout.trim() || null;
   } catch {
     return null;
   }

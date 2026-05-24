@@ -6,6 +6,7 @@ import { ensureWorkspace } from '../../src/workspace/init.js';
 import { startSession, addNote, recordCleanup, finalizeSession } from '../../src/sessions/sessionStore.js';
 import { validateSession } from '../../src/validation/validateWorkspace.js';
 import { readClaimIndex } from '../../src/claims/claimIndex.js';
+import { reviewClaim } from '../../src/review/reviewClaims.js';
 
 describe('session HTML workflow', () => {
   test('notes are escaped structured cards and finalize creates pending review delta', async () => {
@@ -46,6 +47,37 @@ describe('session HTML workflow', () => {
       introduced_by_session: session.id,
       status: 'pending-human-review',
       source_html: finalized.completedPath.replace('.humanintheloop/content/', '')
+    });
+  });
+
+  test('cleanup actions map to declared card statuses and reject unknown actions', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'hitl-cleanup-'));
+    await ensureWorkspace(root);
+    const session = await startSession(root, { spec: 'Spec', task: 'connect a new provider', files: ['src/connectors/foo.ts'] });
+
+    await recordCleanup(root, { sessionId: session.id, action: 'supersede', reason: 'New claim replaces old one.' });
+    await recordCleanup(root, { sessionId: session.id, action: 'keep-with-warning', reason: 'Still useful with caveat.' });
+    await expect(recordCleanup(root, { sessionId: session.id, action: 'bogus', reason: 'Nope.' })).rejects.toThrow(/Unsupported cleanup action/);
+
+    const html = await readFile(join(root, session.path), 'utf8');
+    expect(html).toContain('data-status="superseded"');
+    expect(html).toContain('data-status="kept-with-warning"');
+    expect(html).not.toContain('data-status="supersede"');
+  });
+
+  test('review rejects unsupported statuses and requires superseded-by for superseded', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'hitl-review-status-'));
+    await ensureWorkspace(root);
+    const session = await startSession(root, { spec: 'Spec', task: 'connect a new provider', files: ['src/connectors/foo.ts'] });
+    const note = await addNote(root, { sessionId: session.id, type: 'design-decision', title: 'Decision', body: 'Body' });
+
+    await expect(reviewClaim(root, { claimId: note.claimId, status: 'acceptd' as never })).rejects.toThrow(/Unsupported review status/);
+    await expect(reviewClaim(root, { claimId: note.claimId, status: 'superseded' })).rejects.toThrow(/requires supersededBy/);
+    await reviewClaim(root, { claimId: note.claimId, status: 'superseded', supersededBy: 'claim_replacement' });
+    const claimIndex = await readClaimIndex(root);
+    expect(claimIndex.claims.find((claim) => claim.claim_id === note.claimId)).toMatchObject({
+      status: 'superseded',
+      superseded_by: ['claim_replacement']
     });
   });
 });

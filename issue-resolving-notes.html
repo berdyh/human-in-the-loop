@@ -33,6 +33,14 @@
       <h3>Require confident task matches before promoting related areas</h3>
       <p>Routing now only injects a task's required/recommended areas when the task itself clears a confidence threshold. This keeps weak lexical overlap like "api" or "retrieval" from making unrelated areas required.</p>
     </div>
+    <div class="card">
+      <h3>Validate state-machine inputs at command boundaries</h3>
+      <p>Review statuses and cleanup actions are now checked before persistence so typos cannot create machine-unreadable claim or stale-cleanup states.</p>
+    </div>
+    <div class="card">
+      <h3>Use branch/base evidence for <code>validate --changed</code></h3>
+      <p>Changed-file validation now combines committed branch changes, unstaged changes, staged changes, and untracked files, then excludes HITL's generated workspace.</p>
+    </div>
   </section>
 
   <section id="deviations" data-section="deviations">
@@ -60,6 +68,10 @@
     <div class="card">
       <h3>Threshold over hard-coded exclusions</h3>
       <p>The false routing positives were fixed by tightening the general relation-promotion rule rather than adding special cases for dashboard/API/provider wording.</p>
+    </div>
+    <div class="card">
+      <h3>Recommended context remains optional</h3>
+      <p>Task-recommended areas are capped below the required threshold so validation does not force optional context. They still appear in the recommended group.</p>
     </div>
   </section>
 

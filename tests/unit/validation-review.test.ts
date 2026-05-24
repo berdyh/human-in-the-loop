@@ -57,4 +57,20 @@ describe('validation and review', () => {
     ]));
     expect(changed).not.toContain('.humanintheloop/content/areas/rag/page.html');
   });
+
+  test('changed-file detection includes committed branch files when worktree is clean', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'hitl-committed-'));
+    await execFileAsync('git', ['init'], { cwd: root });
+    await execFileAsync('git', ['config', 'user.email', 'hitl@example.test'], { cwd: root });
+    await execFileAsync('git', ['config', 'user.name', 'HITL Test'], { cwd: root });
+    await writeFile(join(root, 'README.md'), '# fixture\n', 'utf8');
+    await execFileAsync('git', ['add', 'README.md'], { cwd: root });
+    await execFileAsync('git', ['commit', '-m', 'initial'], { cwd: root });
+    await mkdir(join(root, 'src/connectors'), { recursive: true });
+    await writeFile(join(root, 'src/connectors/committed.ts'), 'export const committed = true;\n', 'utf8');
+    await execFileAsync('git', ['add', 'src/connectors/committed.ts'], { cwd: root });
+    await execFileAsync('git', ['commit', '-m', 'add committed connector'], { cwd: root });
+
+    await expect(projectChangedFiles(root)).resolves.toContain('src/connectors/committed.ts');
+  });
 });

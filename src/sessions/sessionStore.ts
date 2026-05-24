@@ -16,6 +16,13 @@ export type NoteInput = { sessionId: string; type: string; title: string; body: 
 export type CleanupInput = { sessionId: string; oldClaim?: string; action: string; reason: string };
 
 const REQUIRED_SECTIONS = ['design-decisions', 'spec-interpretations', 'deviations', 'tradeoffs', 'open-questions', 'stale-cleanup'];
+const CLEANUP_ACTION_TO_STATUS: Record<string, string> = {
+  remove: 'stale',
+  supersede: 'superseded',
+  'needs-review': 'needs-review',
+  'keep-with-warning': 'kept-with-warning',
+  none: 'agent-draft'
+};
 
 function rootRelativeContentPath(...parts: string[]): string {
   return join('.humanintheloop/content', ...parts).replace(/\\/g, '/');
@@ -103,15 +110,17 @@ export async function addNote(root: string, input: NoteInput): Promise<{ cardId:
 }
 
 export async function recordCleanup(root: string, input: CleanupInput): Promise<{ cardId: string; path: string }> {
+  const status = CLEANUP_ACTION_TO_STATUS[input.action];
+  if (!status) throw new Error(`Unsupported cleanup action: ${input.action}`);
   const session = await findSession(root, input.sessionId);
   const html = await readFile(session.absolute, 'utf8');
   const metadata = readMetadata(html);
   const cardId = uniqueId('cleanup', input.action);
   const title = input.action === 'none' ? 'No stale HITL claims found' : `Cleanup: ${input.action}`;
   const body = input.oldClaim ? `${input.reason} Old claim: ${input.oldClaim}` : input.reason;
-  const card = cardHtml({ id: cardId, type: 'stale-cleanup', status: input.action === 'none' ? 'agent-draft' : input.action, title, body });
+  const card = cardHtml({ id: cardId, type: 'stale-cleanup', status, title, body });
   const cards = Array.isArray(metadata.cards) ? metadata.cards as Record<string, unknown>[] : [];
-  cards.push({ id: cardId, type: 'stale-cleanup', action: input.action, status: input.action === 'none' ? 'agent-draft' : input.action, created_at: nowIso() });
+  cards.push({ id: cardId, type: 'stale-cleanup', action: input.action, status, created_at: nowIso() });
   metadata.cards = cards;
   metadata.updated_at = nowIso();
   await writeAtomic(session.absolute, replaceMetadata(insertIntoSection(html, 'stale-cleanup', card), metadata));

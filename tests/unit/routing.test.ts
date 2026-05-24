@@ -38,4 +38,15 @@ describe('context routing', () => {
     expect(source?.confidence).toBeGreaterThanOrEqual(0.8);
     expect(source?.reason).toMatch(/file path/i);
   });
+
+  test('recommended task areas stay recommended instead of required', () => {
+    const result = routeContext({ task: 'add Crunchbase API ingestion', files: [] });
+    expect(result.required.map((item) => item.id)).not.toContain('data-spine');
+    expect(result.recommended.map((item) => item.id)).toContain('data-spine');
+  });
+
+  test('directory globs match path boundaries only', () => {
+    const result = routeContext({ task: 'update legacy connector docs', files: ['src/connectors-old/foo.ts'] });
+    expect(result.required.map((item) => item.id)).not.toContain('source-ingestion');
+  });
 });
