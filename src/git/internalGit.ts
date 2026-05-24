@@ -55,8 +55,20 @@ export async function projectGitHead(root: string): Promise<string | null> {
 
 export async function projectChangedFiles(root: string): Promise<string[] | null> {
   try {
-    const { stdout } = await execFileAsync('git', ['diff', '--name-only'], { cwd: root });
-    return stdout.split('\n').map((line) => line.trim()).filter(Boolean);
+    await execFileAsync('git', ['rev-parse', '--is-inside-work-tree'], { cwd: root });
+    const commands = [
+      ['diff', '--name-only'],
+      ['diff', '--name-only', '--cached'],
+      ['ls-files', '--others', '--exclude-standard']
+    ];
+    const files = new Set<string>();
+    for (const args of commands) {
+      const { stdout } = await execFileAsync('git', args, { cwd: root });
+      for (const line of stdout.split('\n').map((item) => item.trim()).filter(Boolean)) {
+        if (!line.startsWith('.humanintheloop/')) files.add(line);
+      }
+    }
+    return [...files].sort();
   } catch {
     return null;
   }

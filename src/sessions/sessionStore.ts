@@ -21,8 +21,12 @@ function rootRelativeContentPath(...parts: string[]): string {
   return join('.humanintheloop/content', ...parts).replace(/\\/g, '/');
 }
 
+function normalizeSessionId(sessionId: string): string {
+  return sessionId.endsWith('.html') ? sessionId.slice(0, -5) : sessionId;
+}
+
 async function findSession(root: string, sessionId: string): Promise<{ absolute: string; contentRelative: string; rootRelative: string; status: 'active' | 'completed' }> {
-  const id = sessionId.endsWith('.html') ? sessionId.slice(0, -5) : sessionId;
+  const id = normalizeSessionId(sessionId);
   for (const status of ['active', 'completed'] as const) {
     const contentRelative = `sessions/${status}/${id}.html`;
     const absolute = contentPath(root, contentRelative);
@@ -68,6 +72,7 @@ export async function addNote(root: string, input: NoteInput): Promise<{ cardId:
   const section = NOTE_TYPE_TO_SECTION[input.type];
   if (!section || input.type === 'stale-cleanup') throw new Error(`Unsupported note type: ${input.type}`);
   const session = await findSession(root, input.sessionId);
+  const normalizedSessionId = normalizeSessionId(input.sessionId);
   const html = await readFile(session.absolute, 'utf8');
   const metadata = readMetadata(html);
   const affectedAreas = Array.isArray(metadata.affected_areas) ? metadata.affected_areas as string[] : [];
@@ -86,7 +91,7 @@ export async function addNote(root: string, input: NoteInput): Promise<{ cardId:
     status: 'agent-draft',
     affected_areas: affectedAreas,
     related_files: input.files ?? [],
-    introduced_by_session: input.sessionId,
+    introduced_by_session: normalizedSessionId,
     source_html: session.contentRelative,
     created_at: nowIso(),
     updated_at: nowIso(),

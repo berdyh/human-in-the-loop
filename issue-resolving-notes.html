@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Human in the Loop MVP - Issue Resolving Notes</title>
+  <style>
+    body { font-family: system-ui, sans-serif; line-height: 1.55; max-width: 960px; margin: 32px auto; padding: 0 20px; color: #1f2937; }
+    section { border-top: 1px solid #e5e7eb; margin-top: 24px; padding-top: 18px; }
+    .card { border: 1px solid #d1d5db; border-radius: 10px; padding: 14px 16px; margin: 12px 0; background: #fff; }
+    .muted { color: #6b7280; }
+    code { background: #f3f4f6; padding: 2px 4px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Human in the Loop MVP - Issue Resolving Notes</h1>
+  <p class="muted">Running notes for resolving review findings after the MVP implementation.</p>
+
+  <section id="design-decisions" data-section="design-decisions">
+    <h2>Design Decisions</h2>
+    <div class="card">
+      <h3>Make <code>hitl init</code> idempotent instead of refusing existing workspaces</h3>
+      <p>Re-initialization should repair missing scaffold files without deleting existing sessions, claims, or mutable HTML state.</p>
+    </div>
+    <div class="card">
+      <h3>Escape every local-site render boundary</h3>
+      <p>Session cards already escaped user input, but review queue and history pages are separate render boundaries. Claim fields and internal Git log text are now escaped before HTML composition.</p>
+    </div>
+    <div class="card">
+      <h3>Treat HITL workspace files as tool state, not project changes</h3>
+      <p><code>hitl validate --changed</code> now includes staged and untracked project files, but filters <code>.humanintheloop/**</code> so the tool's own generated workspace does not create false affected areas.</p>
+    </div>
+  </section>
+
+  <section id="deviations" data-section="deviations">
+    <h2>Deviations</h2>
+    <div class="card">
+      <h3>No intentional spec departures</h3>
+      <p>The planned fixes tighten the MVP behavior against the existing spec rather than changing scope.</p>
+    </div>
+    <div class="card">
+      <h3>No divergence from review findings</h3>
+      <p>All six reported findings were implemented directly. The only additional change was filtering <code>.humanintheloop/**</code> from project changed-file detection after focused smoke testing showed it was required for <code>--changed</code> to work reliably.</p>
+    </div>
+  </section>
+
+  <section id="tradeoffs" data-section="tradeoffs">
+    <h2>Tradeoffs</h2>
+    <div class="card">
+      <h3>Preserve existing generated pages on re-init</h3>
+      <p>Re-init will not overwrite existing mutable content pages. This favors data preservation over template refresh; template upgrades can be a separate explicit command later.</p>
+    </div>
+    <div class="card">
+      <h3>Add explicit agent-context routes instead of serving arbitrary files</h3>
+      <p>The route table now exposes only the two advertised agent-context URL shapes. This keeps the MVP server narrow while fixing the broken generated links.</p>
+    </div>
+  </section>
+
+  <section id="open-questions" data-section="open-questions">
+    <h2>Open Questions</h2>
+    <div class="card">
+      <h3>Template refresh command</h3>
+      <p>Should a future command explicitly refresh default HITL templates while preserving user/session deltas?</p>
+    </div>
+    <div class="card">
+      <h3>Re-init policy</h3>
+      <p>The current behavior is idempotent repair. If re-init should instead fail loudly when a workspace already exists, that should be specified as a future policy change.</p>
+    </div>
+  </section>
+</body>
+</html>

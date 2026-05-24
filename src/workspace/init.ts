@@ -3,7 +3,7 @@ import { ensureDir, exists, hitlPath, contentPath, writeAtomic } from '../core/p
 import { writeJsonAtomic } from '../core/json.js';
 import { ensureInternalGit, internalGitCommit } from '../git/internalGit.js';
 import { DEFAULT_AREAS, DEFAULT_DECISIONS, DEFAULT_TASKS, agentContextPage, areaPage, decisionPage, graphPage, projectPage, simpleIndexPage, taskPage } from '../html/templates.js';
-import { writeClaimIndex } from '../claims/claimIndex.js';
+import { claimIndexPath, readClaimIndex, writeClaimIndex, writeReviewQueue } from '../claims/claimIndex.js';
 
 const AGENTS_BOOTLOADER = `# Human in the Loop
 
@@ -29,6 +29,14 @@ hitl validate --changed
 Do not put subsystem-specific guidance in this file. Load relevant HITL context instead.
 `;
 
+async function writeIfMissing(path: string, value: string): Promise<void> {
+  if (!(await exists(path))) await writeAtomic(path, value);
+}
+
+async function writeJsonIfMissing(path: string, value: unknown): Promise<void> {
+  if (!(await exists(path))) await writeJsonAtomic(path, value);
+}
+
 export async function ensureWorkspace(root: string): Promise<void> {
   await ensureDir(hitlPath(root));
   await ensureDir(contentPath(root));
@@ -44,39 +52,43 @@ export async function ensureWorkspace(root: string): Promise<void> {
   await ensureDir(contentPath(root, 'stale'));
   await ensureDir(contentPath(root, 'review'));
 
-  await writeJsonAtomic(hitlPath(root, 'config.json'), { version: 1, content_dir: 'content', internal_git_dir: 'history/git' });
-  await writeJsonAtomic(hitlPath(root, 'manifest.json'), { product: 'Human in the Loop', cli: 'hitl', version: 1 });
-  await writeAtomic(contentPath(root, 'project.html'), projectPage());
-  await writeAtomic(contentPath(root, 'graph.html'), graphPage());
-  await writeAtomic(contentPath(root, 'questions/index.html'), simpleIndexPage('Open Questions', 'No cross-session open questions recorded.', 'questions'));
-  await writeAtomic(contentPath(root, 'stale/index.html'), simpleIndexPage('Stale Knowledge', 'No stale HITL claims recorded.', 'stale'));
+  await writeJsonIfMissing(hitlPath(root, 'config.json'), { version: 1, content_dir: 'content', internal_git_dir: 'history/git' });
+  await writeJsonIfMissing(hitlPath(root, 'manifest.json'), { product: 'Human in the Loop', cli: 'hitl', version: 1 });
+  await writeIfMissing(contentPath(root, 'project.html'), projectPage());
+  await writeIfMissing(contentPath(root, 'graph.html'), graphPage());
+  await writeIfMissing(contentPath(root, 'questions/index.html'), simpleIndexPage('Open Questions', 'No cross-session open questions recorded.', 'questions'));
+  await writeIfMissing(contentPath(root, 'stale/index.html'), simpleIndexPage('Stale Knowledge', 'No stale HITL claims recorded.', 'stale'));
 
   for (const area of DEFAULT_AREAS) {
     await ensureDir(contentPath(root, 'areas', area.id));
-    await writeAtomic(contentPath(root, 'areas', area.id, 'page.html'), areaPage(area));
-    await writeAtomic(contentPath(root, 'areas', area.id, 'agent-context.html'), agentContextPage(area.title, area.summary, { ...area, type: 'area-context' }));
-    await writeAtomic(contentPath(root, 'areas', area.id, 'templates.html'), agentContextPage(`${area.title} Templates`, 'Structured note templates for this area.', { type: 'area-templates', area: area.id }));
-    await writeJsonAtomic(contentPath(root, 'areas', area.id, 'metadata.json'), { ...area, type: 'area' });
+    await writeIfMissing(contentPath(root, 'areas', area.id, 'page.html'), areaPage(area));
+    await writeIfMissing(contentPath(root, 'areas', area.id, 'agent-context.html'), agentContextPage(area.title, area.summary, { ...area, type: 'area-context' }));
+    await writeIfMissing(contentPath(root, 'areas', area.id, 'templates.html'), agentContextPage(`${area.title} Templates`, 'Structured note templates for this area.', { type: 'area-templates', area: area.id }));
+    await writeJsonIfMissing(contentPath(root, 'areas', area.id, 'metadata.json'), { ...area, type: 'area' });
   }
 
   for (const task of DEFAULT_TASKS) {
     await ensureDir(contentPath(root, 'tasks', task.id));
-    await writeAtomic(contentPath(root, 'tasks', task.id, 'page.html'), taskPage(task));
-    await writeAtomic(contentPath(root, 'tasks', task.id, 'agent-context.html'), agentContextPage(task.title, task.summary, { ...task, type: 'task-context' }));
-    await writeAtomic(contentPath(root, 'tasks', task.id, 'examples.html'), agentContextPage(`${task.title} Examples`, task.semantic_examples.join('; '), { type: 'task-examples', task: task.id }));
-    await writeJsonAtomic(contentPath(root, 'tasks', task.id, 'metadata.json'), { ...task, type: 'task' });
+    await writeIfMissing(contentPath(root, 'tasks', task.id, 'page.html'), taskPage(task));
+    await writeIfMissing(contentPath(root, 'tasks', task.id, 'agent-context.html'), agentContextPage(task.title, task.summary, { ...task, type: 'task-context' }));
+    await writeIfMissing(contentPath(root, 'tasks', task.id, 'examples.html'), agentContextPage(`${task.title} Examples`, task.semantic_examples.join('; '), { type: 'task-examples', task: task.id }));
+    await writeJsonIfMissing(contentPath(root, 'tasks', task.id, 'metadata.json'), { ...task, type: 'task' });
   }
 
   await ensureDir(contentPath(root, 'decisions'));
   for (const decision of DEFAULT_DECISIONS) {
-    await writeAtomic(contentPath(root, 'decisions', `${decision.id}.html`), decisionPage(decision));
+    await writeIfMissing(contentPath(root, 'decisions', `${decision.id}.html`), decisionPage(decision));
   }
 
-  await writeJsonAtomic(hitlPath(root, 'indexes/file-area-map.json'), Object.fromEntries(DEFAULT_AREAS.map((area) => [area.id, area.path_globs])));
-  await writeJsonAtomic(hitlPath(root, 'indexes/routing-index.json'), { areas: DEFAULT_AREAS, tasks: DEFAULT_TASKS });
-  await writeClaimIndex(root, { claims: [] });
-  await writeJsonAtomic(hitlPath(root, 'indexes/code-state-index.json'), { updated_at: new Date().toISOString(), pending_review_count: 0 });
-  await writeAtomic(hitlPath(root, 'adapters/agents-md/AGENTS.md'), AGENTS_BOOTLOADER);
+  await writeJsonIfMissing(hitlPath(root, 'indexes/file-area-map.json'), Object.fromEntries(DEFAULT_AREAS.map((area) => [area.id, area.path_globs])));
+  await writeJsonIfMissing(hitlPath(root, 'indexes/routing-index.json'), { areas: DEFAULT_AREAS, tasks: DEFAULT_TASKS });
+  if (await exists(claimIndexPath(root))) {
+    await writeReviewQueue(root, await readClaimIndex(root));
+  } else {
+    await writeClaimIndex(root, { claims: [] });
+  }
+  await writeJsonIfMissing(hitlPath(root, 'indexes/code-state-index.json'), { updated_at: new Date().toISOString(), pending_review_count: 0 });
+  await writeIfMissing(hitlPath(root, 'adapters/agents-md/AGENTS.md'), AGENTS_BOOTLOADER);
   if (!(await exists(join(root, 'AGENTS.md')))) {
     await writeAtomic(join(root, 'AGENTS.md'), AGENTS_BOOTLOADER);
   }

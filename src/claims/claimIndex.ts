@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { readJson, writeJsonAtomic } from '../core/json.js';
 import { contentPath, exists } from '../core/paths.js';
 import { nowIso } from '../core/time.js';
+import { escapeHtml } from '../html/escapeHtml.js';
 import { pageLayout } from '../html/templates.js';
 
 export type ClaimStatus = 'agent-draft' | 'pending-human-review' | 'accepted' | 'rejected' | 'superseded' | 'needs-review' | 'stale' | 'kept-with-warning';
@@ -63,7 +64,7 @@ export async function writeReviewQueue(root: string, index?: ClaimIndex): Promis
   const queueIndex = index ?? await readClaimIndex(root);
   const pending = queueIndex.claims.filter((claim) => claim.status === 'pending-human-review' || claim.status === 'needs-review' || claim.status === 'agent-draft');
   const cards = pending.length
-    ? pending.map((claim) => `<div class="hitl-card" data-hitl-card="true" data-card-id="${claim.claim_id}" data-card-type="claim" data-status="${claim.status}"><h3>${claim.title}</h3><p>${claim.type} from session ${claim.introduced_by_session}</p><p class="muted">${claim.source_html}</p></div>`).join('\n')
+    ? pending.map((claim) => `<div class="hitl-card" data-hitl-card="true" data-card-id="${escapeHtml(claim.claim_id)}" data-card-type="claim" data-status="${escapeHtml(claim.status)}"><h3>${escapeHtml(claim.title)}</h3><p>${escapeHtml(claim.type)} from session ${escapeHtml(claim.introduced_by_session)}</p><p class="muted">${escapeHtml(claim.source_html)}</p></div>`).join('\n')
     : '<p class="muted">No claims awaiting review.</p>';
   await writeJsonAtomic(join(root, '.humanintheloop/indexes/code-state-index.json'), { updated_at: nowIso(), pending_review_count: pending.length });
   await import('../core/paths.js').then(({ writeAtomic }) => writeAtomic(contentPath(root, 'review/index.html'), pageLayout('Review Queue', `<h1>Review Queue</h1><section data-section="review-queue">${cards}</section>`, { type: 'review', pending_claims: pending.map((claim) => claim.claim_id) })));

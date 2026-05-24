@@ -37,6 +37,8 @@ describe('hitl CLI e2e', () => {
     await expect(fetchText(`http://127.0.0.1:${port}/`)).resolves.toContain('Human in the Loop');
     await expect(fetchText(`http://127.0.0.1:${port}/graph`)).resolves.toContain('Implementation Memory Graph');
     await expect(fetchText(`http://127.0.0.1:${port}/areas/source-ingestion`)).resolves.toContain('Source Ingestion');
+    await expect(fetchText(`http://127.0.0.1:${port}/areas/source-ingestion/agent-context`)).resolves.toContain('Source Ingestion Agent Context');
+    await expect(fetchText(`http://127.0.0.1:${port}/tasks/add-source-connector/agent-context`)).resolves.toContain('Add Source Connector Agent Context');
     await expect(fetch(`http://127.0.0.1:${port}/api/status`).then((r) => r.json())).resolves.toMatchObject({ ok: true });
 
     const start = runHitl(root, ['start', '--spec', 'Add Crunchbase API ingestion for company profiles', '--task', 'connect a new provider', '--files', 'src/connectors/crunchbase.ts']);
@@ -47,7 +49,7 @@ describe('hitl CLI e2e', () => {
     expect(JSON.parse(context).required.map((item: { id: string }) => item.id)).toContain('source-ingestion');
 
     for (const [type, title, body] of [
-      ['design-decision', 'Normalize provider payloads', 'Provider payloads are normalized before data-spine insertion.'],
+      ['design-decision', '<Normalize provider payloads>', 'Provider payloads are normalized before data-spine insertion.'],
       ['spec-interpretation', 'External source data enters through adapters', 'The spec was interpreted as provider adapter -> normalization -> storage.'],
       ['deviation', 'Raw payloads are not canonical', 'Raw provider payloads are not stored as canonical records.'],
       ['tradeoff', 'Adapter path over direct indexing', 'Direct provider-to-indexing was rejected because it couples indexing to provider schema.'],
@@ -57,6 +59,8 @@ describe('hitl CLI e2e', () => {
     }
 
     runHitl(root, ['cleanup', '--session', sessionId!, '--action', 'none', '--reason', 'No stale HITL claims exist in this new fixture.']);
+    await expect(fetchText(`http://127.0.0.1:${port}/history`)).resolves.toContain('&lt;Normalize provider payloads&gt;');
+    await expect(fetchText(`http://127.0.0.1:${port}/history`)).resolves.not.toContain('<Normalize provider payloads>');
     expect(runHitl(root, ['validate', '--session', sessionId!])).toContain('Validation passed');
     runHitl(root, ['finalize', '--session', sessionId!]);
     expect(runHitl(root, ['validate', '--files', 'src/connectors/crunchbase.ts'])).toContain('Validation passed');

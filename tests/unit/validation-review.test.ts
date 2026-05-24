@@ -1,11 +1,16 @@
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
 import { describe, expect, test } from 'vitest';
 import { ensureWorkspace } from '../../src/workspace/init.js';
 import { startSession, addNote, recordCleanup } from '../../src/sessions/sessionStore.js';
 import { validateSession, validateWorkspace, validateFiles } from '../../src/validation/validateWorkspace.js';
 import { reviewClaim } from '../../src/review/reviewClaims.js';
+import { projectChangedFiles } from '../../src/git/internalGit.js';
+
+const execFileAsync = promisify(execFile);
 
 describe('validation and review', () => {
   test('session validation fails until every required memory section has a card or explicit none', async () => {
@@ -33,5 +38,23 @@ describe('validation and review', () => {
     await reviewClaim(root, { claimId: note.claimId, status: 'accepted' });
     const claimIndex = await readFile(join(root, '.humanintheloop/indexes/claim-index.json'), 'utf8');
     expect(claimIndex).toContain('accepted');
+  });
+
+  test('changed-file detection includes staged and untracked files', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'hitl-changed-'));
+    await execFileAsync('git', ['init'], { cwd: root });
+    await mkdir(join(root, 'src/connectors'), { recursive: true });
+    await mkdir(join(root, '.humanintheloop/content/areas/rag'), { recursive: true });
+    await writeFile(join(root, 'src/connectors/staged.ts'), 'export const staged = true;\n', 'utf8');
+    await writeFile(join(root, 'src/connectors/untracked.ts'), 'export const untracked = true;\n', 'utf8');
+    await writeFile(join(root, '.humanintheloop/content/areas/rag/page.html'), '<h1>RAG</h1>\n', 'utf8');
+    await execFileAsync('git', ['add', 'src/connectors/staged.ts'], { cwd: root });
+
+    const changed = await projectChangedFiles(root);
+    expect(changed).toEqual(expect.arrayContaining([
+      'src/connectors/staged.ts',
+      'src/connectors/untracked.ts'
+    ]));
+    expect(changed).not.toContain('.humanintheloop/content/areas/rag/page.html');
   });
 });
