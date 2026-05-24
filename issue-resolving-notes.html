@@ -29,6 +29,10 @@
       <h3>Treat HITL workspace files as tool state, not project changes</h3>
       <p><code>hitl validate --changed</code> now includes staged and untracked project files, but filters <code>.humanintheloop/**</code> so the tool's own generated workspace does not create false affected areas.</p>
     </div>
+    <div class="card">
+      <h3>Require confident task matches before promoting related areas</h3>
+      <p>Routing now only injects a task's required/recommended areas when the task itself clears a confidence threshold. This keeps weak lexical overlap like "api" or "retrieval" from making unrelated areas required.</p>
+    </div>
   </section>
 
   <section id="deviations" data-section="deviations">
@@ -52,6 +56,10 @@
     <div class="card">
       <h3>Add explicit agent-context routes instead of serving arbitrary files</h3>
       <p>The route table now exposes only the two advertised agent-context URL shapes. This keeps the MVP server narrow while fixing the broken generated links.</p>
+    </div>
+    <div class="card">
+      <h3>Threshold over hard-coded exclusions</h3>
+      <p>The false routing positives were fixed by tightening the general relation-promotion rule rather than adding special cases for dashboard/API/provider wording.</p>
     </div>
   </section>
 

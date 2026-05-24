@@ -18,7 +18,18 @@ describe('context routing', () => {
   test('dashboard styling does not require source ingestion', () => {
     const result = routeContext({ task: 'change dashboard card styling', files: [] });
     expect(result.required.map((item) => item.id)).not.toContain('source-ingestion');
+    expect(result.required.map((item) => item.id)).not.toContain('rag');
     expect([...result.required, ...result.recommended].map((item) => item.id)).toContain('frontend-dashboard');
+  });
+
+  test('weak task relation matches do not inject unrelated required areas', () => {
+    const api = routeContext({ task: 'add api endpoint', files: [] });
+    expect(api.required.map((item) => item.id)).toContain('api-surfaces');
+    expect(api.required.map((item) => item.id)).not.toContain('source-ingestion');
+
+    const provider = routeContext({ task: 'connect a new provider', files: [] });
+    expect(provider.required.map((item) => item.id)).toContain('source-ingestion');
+    expect(provider.required.map((item) => item.id)).not.toContain('api-surfaces');
   });
 
   test('connector file path strongly selects source ingestion', () => {

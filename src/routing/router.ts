@@ -99,6 +99,8 @@ function sortItems(items: ContextItem[]): ContextItem[] {
   return items.sort((a, b) => b.confidence - a.confidence || a.id.localeCompare(b.id));
 }
 
+const TASK_RELATION_THRESHOLD = 0.62;
+
 export function routeContext(input: RouteContextInput): RouteContextResult {
   const files = input.files ?? [];
   const areaItems = DEFAULT_AREAS.map((area) => scoreDefinition({ ...input, files }, area, 'area')).filter((item): item is ContextItem => Boolean(item));
@@ -109,28 +111,28 @@ export function routeContext(input: RouteContextInput): RouteContextResult {
     if (!task) continue;
     for (const areaId of task.required_areas) {
       let area = areaItems.find((item) => item.id === areaId);
-      if (!area) {
+      if (!area && taskItem.confidence >= TASK_RELATION_THRESHOLD) {
         const areaDef = DEFAULT_AREAS.find((candidate) => candidate.id === areaId);
         if (areaDef) {
           area = { id: areaId, type: 'area', path: `.humanintheloop/content/areas/${areaId}/agent-context.html`, confidence: 0.64, reason: `required by task ${task.id}` };
           areaItems.push(area);
         }
       }
-      if (area && taskItem.confidence >= 0.45) {
+      if (area && taskItem.confidence >= TASK_RELATION_THRESHOLD) {
         area.confidence = Math.max(area.confidence, Math.min(0.93, taskItem.confidence + 0.12));
         area.reason = `${area.reason}; required by task ${task.id}`;
       }
     }
     for (const areaId of task.recommended_areas) {
       let area = areaItems.find((item) => item.id === areaId);
-      if (!area) {
+      if (!area && taskItem.confidence >= TASK_RELATION_THRESHOLD) {
         const areaDef = DEFAULT_AREAS.find((candidate) => candidate.id === areaId);
         if (areaDef) {
           area = { id: areaId, type: 'area', path: `.humanintheloop/content/areas/${areaId}/agent-context.html`, confidence: 0.45, reason: `recommended by task ${task.id}` };
           areaItems.push(area);
         }
       }
-      if (area && taskItem.confidence >= 0.45) {
+      if (area && taskItem.confidence >= TASK_RELATION_THRESHOLD) {
         area.confidence = Math.max(area.confidence, Math.min(0.78, taskItem.confidence - 0.05));
         area.reason = `${area.reason}; recommended by task ${task.id}`;
       }
