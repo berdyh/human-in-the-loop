@@ -82,7 +82,7 @@ describe('hitl CLI e2e', () => {
     await mkdir(join(root, 'src/db'), { recursive: true });
     await writeFile(join(root, 'db/migrations/001_init.sql'), 'CREATE TABLE companies (id text primary key);\n', 'utf8');
     await writeFile(join(root, 'src/db/company.ts'), 'export const table = "companies";\n', 'utf8');
-    const dbDocs = runHitl(root, ['db-docs', '--code', 'src/db/company.ts', '--product', '01_PRODUCT_SPEC.md']);
+    const dbDocs = runHitl(root, ['db-docs', '--code', 'src/db/company.ts', '--product', '.initial-plan/01_PRODUCT_SPEC.md']);
     const dbSessionId = /Session:\s+(\S+)/.exec(dbDocs)?.[1];
     expect(dbDocs).toContain('.humanintheloop/content/areas/data-spine/database.html');
     expect(dbDocs).toContain('/areas/data-spine/database');

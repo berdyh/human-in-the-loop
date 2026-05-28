@@ -26,13 +26,13 @@
     <div class="card">
       <h3>Finalize now preflights affected area pages before mutation</h3>
       <p>Finalization treats every affected area page as required state. If any affected area page is missing, finalize fails before writing the completed session, creating the delta, updating claims, or committing internal history.</p>
-      <p>Reason: the plan requires finalized sessions to update affected area pages with recent implementation memory, and <code>03_REPO_STRUCTURE.md</code> says invalid workspace state must not be silently ignored.</p>
+      <p>Reason: the plan requires finalized sessions to update affected area pages with recent implementation memory, and <code>.initial-plan/03_REPO_STRUCTURE.md</code> says invalid workspace state must not be silently ignored.</p>
     </div>
 
     <div class="card">
       <h3>Session-only context derives routing input from session metadata</h3>
       <p><code>hitl context --session &lt;id&gt;</code> is interpreted as enough input by itself. The command reads the session spec, task, files, and affected areas, then merges any explicitly supplied task/files as extra routing hints.</p>
-      <p>Reason: <code>04_CLI_COMMANDS.md</code> lists <code>--session</code> as a meaningful context option, and requiring <code>--task</code> made that option redundant.</p>
+      <p>Reason: <code>.initial-plan/04_CLI_COMMANDS.md</code> lists <code>--session</code> as a meaningful context option, and requiring <code>--task</code> made that option redundant.</p>
     </div>
 
     <div class="card">
