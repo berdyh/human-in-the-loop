@@ -59,13 +59,14 @@
     <p class="muted">Record commands run and whether they passed.</p>
 
     <div class="card"><h3>Red unit test run</h3><p><code>npm install &amp;&amp; npm test</code> installed dependencies and failed because production src modules were missing, confirming tests were written before implementation.</p></div>
-    <div class="card"><h3>Passing verification</h3><p><code>npm test</code> passed 8 unit tests. <code>npm run build</code> passed TypeScript compilation. <code>npm run test:e2e</code> passed the clean temp-dir CLI and site workflow. Manual smoke passed in a fresh temp directory, including the required route checks.</p></div>
+    <div class="card"><h3>Historical passing verification</h3><p>This was the original MVP snapshot: <code>npm test</code>, <code>npm run build</code>, <code>npm run test:e2e</code>, and manual smoke passed at that point. Later review-fix and plan-matching verification is tracked in <code>issue-resolving-notes.html</code>, <code>plan-matching-notes.html</code>, and <code>plan-matching-issue-resolving-notes.html</code>.</p></div>
+    <div class="card"><h3>Plan-matching verification</h3><p><code>npm test</code> passed 36 unit tests. <code>npm run test:e2e</code> passed the clean temp-dir CLI/site workflow and includes <code>npm run build</code>.</p></div>
   </section>
 
   <section id="commits-made" data-section="commits-made">
     <h2>Commits Made</h2>
     <p class="muted">Record meaningful commits made during implementation.</p>
-    <div class="card"><h3>Implementation commits</h3><p><code>a67c1cb</code> chore: scaffold hitl mvp plan and tests</p><p><code>76c6d2a</code> feat: implement hitl mvp cli</p></div>
+    <div class="card"><h3>Initial implementation commits</h3><p><code>a67c1cb</code> chore: scaffold hitl mvp plan and tests</p><p><code>76c6d2a</code> feat: implement hitl mvp cli</p><p>Subsequent review-fix and plan-matching work is captured in the running notes files until final commit history is prepared.</p></div>
   </section>
 
 </body>

@@ -41,6 +41,122 @@
       <h3>Use branch/base evidence for <code>validate --changed</code></h3>
       <p>Changed-file validation now combines committed branch changes, unstaged changes, staged changes, and untracked files, then excludes HITL's generated workspace.</p>
     </div>
+    <div class="card">
+      <h3>Preserve human review states through finalize</h3>
+      <p>Finalization now promotes only <code>agent-draft</code> claims to <code>pending-human-review</code>. Claims already reviewed by a human keep their status while their source path is moved to the completed session.</p>
+    </div>
+    <div class="card">
+      <h3>Make completed sessions immutable to mutating commands</h3>
+      <p><code>hitl note</code> and <code>hitl cleanup</code> now require an active session. Completed sessions remain historical output from finalize rather than accepting dangling draft cards later.</p>
+    </div>
+    <div class="card">
+      <h3>Use structured metadata for validation truth</h3>
+      <p>Changed-file validation now reads session <code>affected_areas</code> and waiver-shaped metadata instead of treating arbitrary note body text as area coverage.</p>
+    </div>
+    <div class="card">
+      <h3>Keep visible cards and embedded metadata in sync</h3>
+      <p>Review status changes now update both the visible <code>data-status</code> attribute and the corresponding <code>metadata.cards[]</code> entry.</p>
+    </div>
+    <div class="card">
+      <h3>Apply cleanup actions to matching old claims</h3>
+      <p>Cleanup cards now update a matching old claim by id or title, including stale, superseded, needs-review, and kept-with-warning states. Supersede actions link the old claim to the cleanup card.</p>
+    </div>
+    <div class="card">
+      <h3>Use persisted file-area-map for validation gates</h3>
+      <p><code>validate --files</code> and <code>validate --changed</code> now union router-derived areas with areas matched from <code>.humanintheloop/indexes/file-area-map.json</code>, so workspace-specific path mappings remain enforceable.</p>
+    </div>
+    <div class="card">
+      <h3>Cleanup mutations must resolve a target first</h3>
+      <p>Non-<code>none</code> cleanup actions now require <code>--old-claim</code> and fail before writing session cards if the supplied claim id or title cannot be found.</p>
+    </div>
+    <div class="card">
+      <h3>Keep claim relationship fields canonical</h3>
+      <p>Review supersession now resolves the replacement through the claim index before writing <code>superseded_by</code>, stores the canonical replacement claim id, and clears stale relationship metadata when a claim is later reviewed into a non-superseded status.</p>
+    </div>
+    <div class="card">
+      <h3>Follow session page renames in internal history</h3>
+      <p>Page-specific history now uses Git rename following so completed session pages still show the start, note, cleanup, and finalize commits that touched the session before it moved from active to completed.</p>
+    </div>
+    <div class="card">
+      <h3>Treat session ids as opaque identifiers</h3>
+      <p>Session lookup now rejects forward and backward path separators before joining paths, so callers cannot use traversal-shaped ids to make completed sessions look active.</p>
+    </div>
+    <div class="card">
+      <h3>Validate generated site route targets</h3>
+      <p>Workspace validation now checks generated area pages, task pages, agent-context pages, and decision pages derived from the routing index/default definitions, not only top-level indexes.</p>
+    </div>
+    <div class="card">
+      <h3>Use the file-area map consistently at session start</h3>
+      <p><code>hitl start</code> now uses the persisted file-area map when computing session <code>affected_areas</code>, matching the validation gate for custom mapped paths.</p>
+    </div>
+    <div class="card">
+      <h3>Keep explicit cleanup-none cards out of review</h3>
+      <p>Finalize now promotes only draft claim cards to <code>pending-human-review</code>. Stale-cleanup <code>none</code> cards remain unindexed session evidence instead of becoming unreviewable pending cards.</p>
+    </div>
+    <div class="card">
+      <h3>Build the published CLI target during install/pack</h3>
+      <p>The package now exposes <code>dist</code> through the package <code>files</code> list and runs <code>npm run build</code> in <code>prepare</code>, so git/package installs create the declared <code>hitl</code> bin target.</p>
+    </div>
+    <div class="card">
+      <h3>Finalize paths come from the looked-up session id</h3>
+      <p>Finalize now uses the normalized session id from session lookup and rewrites embedded metadata back to that id, instead of trusting mutable HTML metadata for output paths or claim updates.</p>
+    </div>
+    <div class="card">
+      <h3>Context routing includes persisted file-map matches</h3>
+      <p><code>hitl context</code> now promotes areas matched by <code>file-area-map.json</code> into required context and preserves related decision context for default areas.</p>
+    </div>
+    <div class="card">
+      <h3>Prefer real branch bases over last-commit fallbacks</h3>
+      <p><code>hitl validate --changed</code> now checks remote and local default-branch refs before falling back to <code>HEAD~1</code>, so multi-commit local feature branches keep full coverage.</p>
+    </div>
+    <div class="card">
+      <h3>Reject cyclic claim supersession</h3>
+      <p><code>hitl review --status superseded</code> now rejects replacements that resolve to the same canonical claim id, preventing self-cycles in <code>superseded_by</code>.</p>
+    </div>
+    <div class="card">
+      <h3>Area empty states are replaced by real deltas</h3>
+      <p>Finalizing the first implementation delta for an area now removes the default "no finalized memory" text before inserting the recent-memory card.</p>
+    </div>
+    <div class="card">
+      <h3>Validate persisted paths before filesystem writes</h3>
+      <p>Claim <code>source_html</code> values and mapped area ids are now checked before they are joined into HITL content paths, so corrupted indexes cannot redirect review or finalize writes outside the content tree.</p>
+    </div>
+    <div class="card">
+      <h3>Context fails fast on malformed file maps</h3>
+      <p><code>hitl context</code> now ignores only the absence of an initialized file-area map. If the map exists but is malformed, the command reports the error instead of silently returning router-only context.</p>
+    </div>
+    <div class="card">
+      <h3>Cleanup actions preflight their target claim</h3>
+      <p>Non-<code>none</code> cleanup now validates the target claim source path before adding the cleanup card, preventing failed cleanup commands from leaving persistent session evidence.</p>
+    </div>
+    <div class="card">
+      <h3><code>hitl context --session</code> is session-aware</h3>
+      <p>The documented session option now loads the session metadata, merges its task, files, and affected areas into context routing, and rejects missing or invalid session ids.</p>
+    </div>
+    <div class="card">
+      <h3>Return related decisions as routed context</h3>
+      <p>Routing now emits declared related decision pages as recommended context so agents receive durable decisions like <code>api-source-pull-model</code> when source-ingestion is selected.</p>
+    </div>
+    <div class="card">
+      <h3>Validate persisted claim records before rendering</h3>
+      <p>The claim index now validates required fields, statuses, string arrays, and safe source paths at read time. This makes <code>hitl validate</code> reject corrupted persisted state before review rendering can crash.</p>
+    </div>
+    <div class="card">
+      <h3>Preflight finalized affected areas before writes</h3>
+      <p>Finalization now validates session <code>affected_areas</code> immediately after metadata parsing, before rewriting the active session, moving it to completed, or creating a delta page.</p>
+    </div>
+    <div class="card">
+      <h3>Use readiness polling for e2e server checks</h3>
+      <p>The e2e test now allocates an available loopback port and waits for <code>/api/status</code> to respond before checking page routes.</p>
+    </div>
+    <div class="card">
+      <h3>Internal HITL Git is isolated from user signing policy</h3>
+      <p>The tool-owned internal Git repository now sets <code>commit.gpgsign=false</code> so global user signing requirements cannot break local HITL history commits.</p>
+    </div>
+    <div class="card">
+      <h3>File-area-map shape errors fail closed</h3>
+      <p><code>file-area-map.json</code> entries must now map each known area to an array of string patterns. Typos such as a single string value are rejected instead of silently disabling validation coverage.</p>
+    </div>
   </section>
 
   <section id="deviations" data-section="deviations">
@@ -52,6 +168,62 @@
     <div class="card">
       <h3>No divergence from review findings</h3>
       <p>All six reported findings were implemented directly. The only additional change was filtering <code>.humanintheloop/**</code> from project changed-file detection after focused smoke testing showed it was required for <code>--changed</code> to work reliably.</p>
+    </div>
+    <div class="card">
+      <h3>No divergence from second review findings</h3>
+      <p>The second review found three issues. The fixes preserve reviewed claim state, block post-finalize mutation, and make the e2e script build the CLI before execution.</p>
+    </div>
+    <div class="card">
+      <h3>No divergence from third review findings</h3>
+      <p>The third review found three validation/state issues. The fixes use parsed metadata for area coverage, sync review metadata, and validate all required route pages plus internal Git <code>HEAD</code>.</p>
+    </div>
+    <div class="card">
+      <h3>No divergence from fourth review findings</h3>
+      <p>The fourth review found three routing/cleanup issues. The fixes narrow API-vs-ingestion scoring, apply cleanup actions to old claims, and include related decision pages in context results.</p>
+    </div>
+    <div class="card">
+      <h3>No divergence from fifth review findings</h3>
+      <p>The fifth review found two workflow correctness issues. The fixes honor the persisted file-area map during validation and reject non-<code>none</code> cleanup actions unless the old claim resolves.</p>
+    </div>
+    <div class="card">
+      <h3>No divergence from sixth review findings</h3>
+      <p>The sixth review found three data/history issues. The fixes validate review supersession targets, clear stale supersession metadata, and follow session file renames in page history.</p>
+    </div>
+    <div class="card">
+      <h3>No divergence from seventh review findings</h3>
+      <p>The seventh review found two validation/immutability issues. The fixes reject path-like session ids and validate generated route-backed pages.</p>
+    </div>
+    <div class="card">
+      <h3>No divergence from eighth review findings</h3>
+      <p>The eighth review found three workflow/distribution issues. The fixes align session start with file-map validation, keep cleanup-none cards unreviewable-by-design, and build/include the CLI bin target for installs.</p>
+    </div>
+    <div class="card">
+      <h3>No divergence from ninth review findings</h3>
+      <p>The ninth review found two metadata/context issues. The fixes stop trusting session metadata ids for finalize paths and make <code>hitl context</code> honor the persisted file-area map.</p>
+    </div>
+    <div class="card">
+      <h3>No divergence from tenth review findings</h3>
+      <p>The tenth review found three changed-file, supersession, and area-page empty-state issues. The fixes implement those findings directly.</p>
+    </div>
+    <div class="card">
+      <h3>No divergence from eleventh review findings</h3>
+      <p>The eleventh review found that same-branch upstream refs can mask pushed feature-branch changes. The fix removes tracking-branch upstream from diff-base candidates and relies on default-branch refs instead.</p>
+    </div>
+    <div class="card">
+      <h3>No divergence from twelfth review findings</h3>
+      <p>The twelfth review found three persisted-state safety issues. The fixes reject unsafe claim source paths, reject unsafe or unknown file-map area ids, and surface malformed file-map JSON in <code>hitl context</code>.</p>
+    </div>
+    <div class="card">
+      <h3>No divergence from thirteenth review findings</h3>
+      <p>The thirteenth review found two state/context issues. The fixes preflight cleanup target paths before session mutation and implement the documented <code>--session</code> context behavior.</p>
+    </div>
+    <div class="card">
+      <h3>No divergence from fourteenth review findings</h3>
+      <p>The fourteenth review found two validation ordering gaps and one deterministic-port test issue. The fixes implement those findings directly without changing CLI scope.</p>
+    </div>
+    <div class="card">
+      <h3>No divergence from fifteenth review findings</h3>
+      <p>The fifteenth review found two environment/configuration correctness issues. The fixes disable internal commit signing and reject malformed file-area-map values directly.</p>
     </div>
   </section>
 
@@ -72,6 +244,70 @@
     <div class="card">
       <h3>Recommended context remains optional</h3>
       <p>Task-recommended areas are capped below the required threshold so validation does not force optional context. They still appear in the recommended group.</p>
+    </div>
+    <div class="card">
+      <h3>Self-building e2e over TypeScript runtime e2e</h3>
+      <p><code>npm run test:e2e</code> now builds <code>dist/</code> before running the CLI workflow. This keeps the e2e test aligned with the published <code>bin</code> path instead of bypassing it through <code>tsx</code>.</p>
+    </div>
+    <div class="card">
+      <h3>Negative examples over global threshold changes</h3>
+      <p>The routing false positives were fixed by teaching source-ingestion and API-surface contexts about each other's negative examples. This preserves valid <code>add api endpoint</code> routing while preventing provider API ingestion from loading API-surface context.</p>
+    </div>
+    <div class="card">
+      <h3>Union map and router results</h3>
+      <p>File validation now treats the persisted file-area map as an additional source of required areas rather than replacing the router. This preserves semantic routing while making explicit workspace mappings authoritative for mapped paths.</p>
+    </div>
+    <div class="card">
+      <h3>Resolve relationships before mutating state</h3>
+      <p>Supersession review now performs an extra claim-index lookup before mutation. This costs one local JSON read but prevents dangling review relationships and preserves canonical claim ids.</p>
+    </div>
+    <div class="card">
+      <h3>Default definitions plus routing-index ids</h3>
+      <p>Generated route validation reads area/task ids from <code>routing-index.json</code> when available and uses default decision ids. This keeps customized area/task route checks aligned with the workspace without inventing a new decision-index format.</p>
+    </div>
+    <div class="card">
+      <h3>Prepare script over committed dist</h3>
+      <p>The CLI keeps <code>dist/</code> ignored in source control and relies on <code>prepare</code> plus package <code>files</code> metadata to build distributable output. This avoids committing generated JavaScript while keeping git installs functional.</p>
+    </div>
+    <div class="card">
+      <h3>CLI merge over router root awareness</h3>
+      <p>The router remains deterministic and root-agnostic. The CLI merges persisted file-map areas at the boundary where workspace state is available, avoiding a filesystem dependency in the pure routing module.</p>
+    </div>
+    <div class="card">
+      <h3>Skip the current branch when checking local bases</h3>
+      <p>Local <code>main</code>/<code>master</code> are only used as diff bases when they are not the checked-out branch. This preserves the existing <code>HEAD~1</code> fallback for single-branch repositories while fixing local feature branches.</p>
+    </div>
+    <div class="card">
+      <h3>Avoid tracking-branch upstream as a validation base</h3>
+      <p>A pushed feature branch often tracks <code>origin/&lt;feature&gt;</code>, not the integration branch. Using that ref as the diff base can resolve to <code>HEAD</code>, so the implementation now limits automatic branch bases to default-branch refs.</p>
+    </div>
+    <div class="card">
+      <h3>Simple empty-state removal over area-page rewrites</h3>
+      <p>The area-page delta update removes only the generated empty-state paragraph before appending the new card. This avoids rebuilding customized area pages while eliminating contradictory text.</p>
+    </div>
+    <div class="card">
+      <h3>Fail closed on corrupted persisted routing state</h3>
+      <p>Malformed file-area maps now stop context/session workflows instead of being treated as absent. This is stricter, but it keeps the pre-edit context gate consistent with later validation and finalize behavior.</p>
+    </div>
+    <div class="card">
+      <h3>Hydrate context at the CLI boundary</h3>
+      <p>Session metadata is merged in <code>cli.ts</code> rather than the pure router. This keeps routing deterministic while making the command honor workspace state when a session id is supplied.</p>
+    </div>
+    <div class="card">
+      <h3>Read-boundary validation over render guards</h3>
+      <p>Malformed claims are rejected by <code>readClaimIndex</code> instead of adding defensive checks only in the review queue renderer. This keeps every command that consumes claims on the same invariant.</p>
+    </div>
+    <div class="card">
+      <h3>Fetch readiness over stdout parsing</h3>
+      <p>The e2e server wait probes the same local JSON endpoint used by the site smoke test. That avoids coupling the test to console text while still detecting bind failures before route assertions.</p>
+    </div>
+    <div class="card">
+      <h3>Repo-local Git config over command flags</h3>
+      <p>Disabling commit signing in the internal Git config is applied whenever the internal repo is ensured. This covers init and later commands without repeating flags at every commit call.</p>
+    </div>
+    <div class="card">
+      <h3>Strict map validation over partial recovery</h3>
+      <p>A malformed map value now fails the command rather than skipping only that area. This is intentionally strict because the map is a validation gate, not optional display metadata.</p>
     </div>
   </section>
 

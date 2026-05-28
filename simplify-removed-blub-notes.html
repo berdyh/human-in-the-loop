@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Simplification and Removal Notes</title>
+  <style>
+    body { margin:0; font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color:#172033; background:#f8fafc; line-height:1.55; }
+    main { max-width:980px; margin:0 auto; padding:40px 20px 64px; }
+    h1 { margin:0 0 8px; font-size:34px; }
+    h2 { margin-top:28px; border-bottom:1px solid #d9e2ec; padding-bottom:6px; }
+    .muted { color:#607086; }
+    .card { background:#fff; border:1px solid #d9e2ec; border-radius:8px; padding:16px; margin:12px 0; }
+    code { background:#edf2f7; border-radius:6px; padding:2px 5px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Simplification and Removal Notes</h1>
+  <p class="muted">Running notes for simplifications made while adding template scaffolds.</p>
+
+  <section>
+    <h2>Design Decisions</h2>
+    <div class="card">
+      <p>Prefer deleting duplicated db-docs helper logic by moving common behavior into one area-docs pipeline. Keep the wrapper only for backward compatibility.</p>
+    </div>
+    <div class="card">
+      <p>Use a route-slug whitelist from the area-docs registry instead of adding one server branch per template. This keeps route behavior explicit while avoiding repetitive conditionals.</p>
+    </div>
+    <div class="card">
+      <p>Removed the now-unused area-link write wrapper after changing the scaffold flow to precompute the area-page update before writing generated docs.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Deviations</h2>
+    <div class="card">
+      <p>The database SVG placeholder was not removed even though one simplification review suggested it, because the accepted database-docs plan explicitly required an inline SVG ERD placeholder.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Tradeoffs</h2>
+    <div class="card">
+      <p>Do not refactor unrelated routing, validation, or session internals unless needed for the template feature. The current goal is to remove duplicated scaffold logic, not redesign the HITL system.</p>
+    </div>
+    <div class="card">
+      <p>The generic module is larger than the original database-only file, but it prevents six copied scaffold lifecycles and keeps new template content declarative.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Open Questions</h2>
+    <div class="card">
+      <p><code>createDatabaseDocs</code> is now only a compatibility wrapper. Keep it while <code>hitl db-docs</code> is a documented command; remove it only if the public CLI deprecates that alias later.</p>
+    </div>
+  </section>
+</main>
+</body>
+</html>
