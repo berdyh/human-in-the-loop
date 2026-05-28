@@ -1,12 +1,18 @@
 #!/usr/bin/env node
+import { readFile } from 'node:fs/promises';
 import { Command } from 'commander';
 import { ensureWorkspace } from './workspace/init.js';
-import { routeContext } from './routing/router.js';
-import { startSession, addNote, recordCleanup, finalizeSession } from './sessions/sessionStore.js';
-import { validateFiles, validateSession, validateWorkspace } from './validation/validateWorkspace.js';
+import { routeContext, type ContextItem, type RouteContextResult } from './routing/router.js';
+import { startSession, addNote, recordCleanup, finalizeSession, findSession } from './sessions/sessionStore.js';
+import { mappedAreasFromFileAreaMap, validateFiles, validateSession, validateWorkspace } from './validation/validateWorkspace.js';
 import { internalGitLog, projectChangedFiles } from './git/internalGit.js';
 import { reviewClaim } from './review/reviewClaims.js';
 import { serve } from './site/server.js';
+import { DEFAULT_AREAS, DEFAULT_DECISIONS } from './html/templates.js';
+import { assertSafePathSegment, exists, hitlPath } from './core/paths.js';
+import { readMetadata } from './html/cards.js';
+import { AREA_DOC_KINDS, createAreaDocs } from './docs/areaDocs.js';
+import { createDatabaseDocs } from './docs/dbDocs.js';
 
 function parseFiles(value?: string): string[] {
   return value ? value.split(/[\s,]+/).map((file) => file.trim()).filter(Boolean) : [];
@@ -21,6 +27,59 @@ function printValidation(prefix: string, result: { ok: boolean; errors: string[]
     for (const error of result.errors) console.error(`- ${error}`);
     process.exitCode = 1;
   }
+}
+
+function sortContextItems(items: ContextItem[]): ContextItem[] {
+  return items.sort((a, b) => b.confidence - a.confidence || a.id.localeCompare(b.id));
+}
+
+function removeContextItem(items: ContextItem[], id: string, type: ContextItem['type']): ContextItem | undefined {
+  const index = items.findIndex((item) => item.id === id && item.type === type);
+  if (index === -1) return undefined;
+  return items.splice(index, 1)[0];
+}
+
+type SessionContextInput = { task: string; files: string[]; areas: string[] };
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+async function contextInputFromSession(root: string, sessionId?: string): Promise<SessionContextInput> {
+  if (!sessionId) return { task: '', files: [], areas: [] };
+  const session = await findSession(root, sessionId);
+  const metadata = readMetadata(await readFile(session.absolute, 'utf8'));
+  const task = [metadata.spec, metadata.task].filter((item): item is string => typeof item === 'string').join(' ');
+  return {
+    task,
+    files: stringArray(metadata.files),
+    areas: stringArray(metadata.affected_areas).map((area) => assertSafePathSegment('session affected area id', area))
+  };
+}
+
+async function contextWithFileAreaMap(root: string, task: string, files: string[], sessionAreas: string[] = []): Promise<RouteContextResult> {
+  const context = routeContext({ task, files });
+  let mappedAreas = [...sessionAreas];
+  if (files.length && await exists(hitlPath(root, 'indexes/file-area-map.json'))) {
+    mappedAreas = [...new Set([...mappedAreas, ...await mappedAreasFromFileAreaMap(root, files)])];
+  }
+  for (const area of mappedAreas) {
+    const existing = context.required.find((item) => item.id === area && item.type === 'area')
+      ?? removeContextItem(context.recommended, area, 'area')
+      ?? removeContextItem(context.possible, area, 'area');
+    const item: ContextItem = existing
+      ? { ...existing, confidence: Math.max(existing.confidence, 0.91), reason: `${existing.reason}; matched persisted file-area-map` }
+      : { id: area, type: 'area', path: `.humanintheloop/content/areas/${area}/agent-context.html`, confidence: 0.91, reason: 'matched persisted file-area-map' };
+    if (!context.required.some((candidate) => candidate.id === area && candidate.type === 'area')) context.required.push(item);
+    const areaDef = DEFAULT_AREAS.find((candidate) => candidate.id === area);
+    for (const decisionId of areaDef?.related_decisions ?? []) {
+      const knownDecision = DEFAULT_DECISIONS.find((decision) => decision.id === decisionId);
+      if (!knownDecision) continue;
+      const exists = [...context.required, ...context.recommended, ...context.possible].some((candidate) => candidate.id === decisionId && candidate.type === 'decision');
+      if (!exists) context.recommended.push({ id: decisionId, type: 'decision', path: `.humanintheloop/content/decisions/${decisionId}.html`, confidence: 0.61, reason: `related decision for mapped area ${area}` });
+    }
+  }
+  return { required: sortContextItems(context.required), recommended: sortContextItems(context.recommended), possible: sortContextItems(context.possible) };
 }
 
 const program = new Command();
@@ -52,13 +111,17 @@ program.command('start')
   });
 
 program.command('context')
-  .requiredOption('--task <task>')
+  .option('--task <task>')
   .option('--files <files>')
   .option('--session <session>')
   .option('--json')
   .description('Return relevant HITL context')
-  .action((options) => {
-    const context = routeContext({ task: options.task, files: parseFiles(options.files) });
+  .action(async (options) => {
+    const sessionInput = await contextInputFromSession(process.cwd(), options.session);
+    const task = [sessionInput.task, options.task].filter(Boolean).join(' ');
+    const files = [...new Set([...sessionInput.files, ...parseFiles(options.files)])];
+    if (!task && !files.length) throw new Error('hitl context requires --task, --files, or --session');
+    const context = await contextWithFileAreaMap(process.cwd(), task, files, sessionInput.areas);
     if (options.json) {
       console.log(JSON.stringify(context, null, 2));
       return;
@@ -67,6 +130,51 @@ program.command('context')
       console.log(`${label[0].toUpperCase()}${label.slice(1)}`);
       for (const item of items) console.log(`- ${item.id} (${item.type}, ${item.confidence}): ${item.path} - ${item.reason}`);
     }
+  });
+
+program.command('db-docs')
+  .option('--area <id>', 'HITL area to attach database notes to', 'data-spine')
+  .option('--db-dir <path>', 'database schema/migration/seed evidence directory', 'db')
+  .option('--code <globs>', 'backend code evidence globs or paths')
+  .option('--product <files>', 'product/spec evidence files')
+  .option('--force', 'refresh an existing HITL-generated database notes scaffold')
+  .description('Create HITL-native database documentation scaffold and session')
+  .action(async (options) => {
+    const result = await createDatabaseDocs(process.cwd(), {
+      area: options.area,
+      dbDir: options.dbDir,
+      code: parseFiles(options.code),
+      product: parseFiles(options.product),
+      force: Boolean(options.force)
+    });
+    console.log(`Database notes: ${result.path}`);
+    console.log(`Route: ${result.route}`);
+    console.log(`Session: ${result.sessionId}`);
+    console.log(`Status: ${result.wrote ? 'created-or-refreshed' : 'preserved-existing'}, ${result.linked ? 'linked-area-page' : 'area-link-present'}`);
+  });
+
+program.command('area-docs')
+  .requiredOption('--kind <kind>', `documentation template kind: ${AREA_DOC_KINDS.filter((kind) => kind !== 'database').join(', ')}`)
+  .option('--area <id>', 'HITL area to attach notes to')
+  .option('--evidence <paths>', 'evidence paths or globs the agent should inspect')
+  .option('--code <globs>', 'code paths/globs the agent should inspect')
+  .option('--product <files>', 'product/spec files the agent should inspect')
+  .option('--force', 'refresh an existing HITL-generated scaffold for the same kind')
+  .description('Create a HITL-native area documentation scaffold and review session')
+  .action(async (options) => {
+    const result = await createAreaDocs(process.cwd(), {
+      kind: options.kind,
+      area: options.area,
+      evidence: parseFiles(options.evidence),
+      code: parseFiles(options.code),
+      product: parseFiles(options.product),
+      force: Boolean(options.force)
+    });
+    console.log(`Area notes: ${result.path}`);
+    console.log(`Kind: ${result.kind}`);
+    console.log(`Route: ${result.route}`);
+    console.log(`Session: ${result.sessionId}`);
+    console.log(`Status: ${result.wrote ? 'created-or-refreshed' : 'preserved-existing'}, ${result.linked ? 'linked-area-page' : 'area-link-present'}`);
   });
 
 program.command('note')

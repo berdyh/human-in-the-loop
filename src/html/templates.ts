@@ -40,7 +40,7 @@ export const DEFAULT_AREAS: AreaDefinition[] = [
     summary: 'External provider connectors, source API pulls, imports, sync, and adapter behavior.',
     path_globs: ['src/connectors/**', 'src/providers/**', 'src/ingestion/**'],
     semantic_examples: ['add Crunchbase API ingestion', 'connect a new provider for company profiles', 'pull organization data from external provider'],
-    negative_examples: ['change dashboard card styling', 'frontend widget layout'],
+    negative_examples: ['change dashboard card styling', 'frontend widget layout', 'add api endpoint', 'route handler', 'public api surface'],
     related_tasks: ['add-source-connector'],
     related_decisions: ['api-source-pull-model']
   },
@@ -70,7 +70,7 @@ export const DEFAULT_AREAS: AreaDefinition[] = [
     summary: 'HTTP routes, controllers, handlers, public/internal API shape, and endpoint contracts.',
     path_globs: ['src/api/**', 'src/routes/**', 'src/controllers/**', 'src/handlers/**'],
     semantic_examples: ['add api endpoint', 'controller route handler', 'public api surface'],
-    negative_examples: ['database schema migration only'],
+    negative_examples: ['database schema migration only', 'api ingestion', 'provider api', 'external provider api', 'source connector'],
     related_tasks: ['add-api-surface'],
     related_decisions: []
   },
@@ -105,7 +105,7 @@ export const DEFAULT_TASKS: TaskDefinition[] = [
     recommended_areas: ['data-spine'],
     path_globs: ['src/connectors/**', 'src/providers/**'],
     semantic_examples: ['add Crunchbase API ingestion', 'connect a new provider for company profiles', 'pull organization data from external provider'],
-    negative_examples: ['dashboard card styling'],
+    negative_examples: ['dashboard card styling', 'add api endpoint', 'route handler', 'public api surface'],
     related_decisions: ['api-source-pull-model']
   },
   {
@@ -127,7 +127,7 @@ export const DEFAULT_TASKS: TaskDefinition[] = [
     recommended_areas: [],
     path_globs: ['src/api/**', 'src/routes/**', 'src/controllers/**'],
     semantic_examples: ['add api endpoint', 'new route handler', 'public api surface'],
-    negative_examples: ['dashboard styling'],
+    negative_examples: ['dashboard styling', 'api ingestion', 'provider api', 'external provider api', 'source connector'],
     related_decisions: []
   }
 ];

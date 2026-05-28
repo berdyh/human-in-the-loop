@@ -1,10 +1,20 @@
 import { createServer, type Server } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { contentPath, exists } from '../core/paths.js';
+import { assertSafePathSegment, contentPath, exists } from '../core/paths.js';
 import { internalGitLog } from '../git/internalGit.js';
 import { escapeHtml } from '../html/escapeHtml.js';
 import { pageLayout } from '../html/templates.js';
 import { validateWorkspace } from '../validation/validateWorkspace.js';
+import { areaDocFileForRouteSlug } from '../docs/areaDocs.js';
+
+function routeSegment(kind: string, value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    return assertSafePathSegment(kind, value);
+  } catch {
+    return null;
+  }
+}
 
 function routeToContentPath(root: string, pathname: string): string | null {
   if (pathname === '/') return contentPath(root, 'project.html');
@@ -13,13 +23,39 @@ function routeToContentPath(root: string, pathname: string): string | null {
   if (pathname === '/stale') return contentPath(root, 'stale/index.html');
   if (pathname === '/review') return contentPath(root, 'review/index.html');
   const parts = pathname.split('/').filter(Boolean);
-  if (parts[0] === 'areas' && parts[1] && parts[2] === 'agent-context') return contentPath(root, 'areas', parts[1], 'agent-context.html');
-  if (parts[0] === 'areas' && parts[1]) return contentPath(root, 'areas', parts[1], 'page.html');
-  if (parts[0] === 'tasks' && parts[1] && parts[2] === 'agent-context') return contentPath(root, 'tasks', parts[1], 'agent-context.html');
-  if (parts[0] === 'tasks' && parts[1]) return contentPath(root, 'tasks', parts[1], 'page.html');
-  if (parts[0] === 'decisions' && parts[1]) return contentPath(root, 'decisions', `${parts[1]}.html`);
-  if (parts[0] === 'sessions' && (parts[1] === 'active' || parts[1] === 'completed') && parts[2]) return contentPath(root, 'sessions', parts[1], `${parts[2]}.html`);
-  if (parts[0] === 'deltas' && parts[1]) return contentPath(root, 'deltas', `${parts[1]}.html`);
+  if (parts.length === 3 && parts[0] === 'areas' && parts[2] === 'agent-context') {
+    const id = routeSegment('area id', parts[1]);
+    return id ? contentPath(root, 'areas', id, 'agent-context.html') : null;
+  }
+  if (parts.length === 3 && parts[0] === 'areas') {
+    const id = routeSegment('area id', parts[1]);
+    const file = areaDocFileForRouteSlug(parts[2]);
+    return id && file ? contentPath(root, 'areas', id, file) : null;
+  }
+  if (parts.length === 2 && parts[0] === 'areas') {
+    const id = routeSegment('area id', parts[1]);
+    return id ? contentPath(root, 'areas', id, 'page.html') : null;
+  }
+  if (parts.length === 3 && parts[0] === 'tasks' && parts[2] === 'agent-context') {
+    const id = routeSegment('task id', parts[1]);
+    return id ? contentPath(root, 'tasks', id, 'agent-context.html') : null;
+  }
+  if (parts.length === 2 && parts[0] === 'tasks') {
+    const id = routeSegment('task id', parts[1]);
+    return id ? contentPath(root, 'tasks', id, 'page.html') : null;
+  }
+  if (parts.length === 2 && parts[0] === 'decisions') {
+    const id = routeSegment('decision id', parts[1]);
+    return id ? contentPath(root, 'decisions', `${id}.html`) : null;
+  }
+  if (parts.length === 3 && parts[0] === 'sessions' && (parts[1] === 'active' || parts[1] === 'completed')) {
+    const id = routeSegment('session id', parts[2]);
+    return id ? contentPath(root, 'sessions', parts[1], `${id}.html`) : null;
+  }
+  if (parts.length === 2 && parts[0] === 'deltas') {
+    const id = routeSegment('delta id', parts[1]);
+    return id ? contentPath(root, 'deltas', `${id}.html`) : null;
+  }
   return null;
 }
 

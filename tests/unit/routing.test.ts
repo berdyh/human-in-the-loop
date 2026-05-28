@@ -6,7 +6,10 @@ describe('context routing', () => {
     const result = routeContext({ task: 'add Crunchbase API ingestion', files: [] });
     expect(result.required.map((item) => item.id)).toContain('source-ingestion');
     expect(result.required.map((item) => item.id)).toContain('add-source-connector');
+    expect(result.required.map((item) => item.id)).not.toContain('api-surfaces');
+    expect(result.required.map((item) => item.id)).not.toContain('add-api-surface');
     expect([...result.required, ...result.recommended].map((item) => item.id)).toContain('data-spine');
+    expect(result.recommended.map((item) => item.id)).toContain('api-source-pull-model');
   });
 
   test('semantic provider wording selects source ingestion without exact phrase', () => {
@@ -26,6 +29,7 @@ describe('context routing', () => {
     const api = routeContext({ task: 'add api endpoint', files: [] });
     expect(api.required.map((item) => item.id)).toContain('api-surfaces');
     expect(api.required.map((item) => item.id)).not.toContain('source-ingestion');
+    expect(api.required.map((item) => item.id)).not.toContain('add-source-connector');
 
     const provider = routeContext({ task: 'connect a new provider', files: [] });
     expect(provider.required.map((item) => item.id)).toContain('source-ingestion');

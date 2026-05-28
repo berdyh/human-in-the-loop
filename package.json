@@ -6,10 +6,15 @@
   "bin": {
     "hitl": "dist/cli.js"
   },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "prepare": "npm run build",
     "test": "vitest run tests/unit",
-    "test:e2e": "vitest run tests/e2e"
+    "test:e2e": "npm run build && vitest run tests/e2e"
   },
   "engines": {
     "node": ">=20"

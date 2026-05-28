@@ -26,6 +26,7 @@ export async function ensureInternalGit(root: string): Promise<void> {
   }
   await runGit(root, ['config', 'user.name', 'Human in the Loop']);
   await runGit(root, ['config', 'user.email', 'hitl@local']);
+  await runGit(root, ['config', 'commit.gpgsign', 'false']);
 }
 
 export async function internalGitCommit(root: string, message: string): Promise<boolean> {
@@ -40,7 +41,7 @@ export async function internalGitCommit(root: string, message: string): Promise<
 export async function internalGitLog(root: string, page?: string): Promise<string> {
   await ensureInternalGit(root);
   const args = ['log', '--oneline', '--decorate'];
-  if (page) args.push('--', page);
+  if (page) args.push('--follow', '--', page);
   return runGit(root, args, true);
 }
 
@@ -77,8 +78,10 @@ export async function projectChangedFiles(root: string): Promise<string[] | null
 }
 
 async function projectBranchDiffBase(root: string): Promise<string | null> {
-  const remoteCandidates = ['origin/main', 'origin/master'];
-  for (const candidate of remoteCandidates) {
+  const currentBranch = await currentProjectBranch(root);
+  const candidates = ['origin/main', 'origin/master', 'upstream/main', 'upstream/master', 'main', 'master'];
+  for (const candidate of candidates) {
+    if (candidate === currentBranch) continue;
     try {
       await execFileAsync('git', ['rev-parse', '--verify', candidate], { cwd: root });
       const { stdout } = await execFileAsync('git', ['merge-base', candidate, 'HEAD'], { cwd: root });
@@ -89,6 +92,15 @@ async function projectBranchDiffBase(root: string): Promise<string | null> {
   }
   try {
     const { stdout } = await execFileAsync('git', ['rev-parse', '--verify', 'HEAD~1'], { cwd: root });
+    return stdout.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+async function currentProjectBranch(root: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync('git', ['branch', '--show-current'], { cwd: root });
     return stdout.trim() || null;
   } catch {
     return null;

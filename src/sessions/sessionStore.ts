@@ -1,22 +1,22 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { uniqueId } from '../core/ids.js';
-import { contentPath, exists, writeAtomic } from '../core/paths.js';
+import { assertSafePathSegment, contentPath, exists, safeContentPath, writeAtomic } from '../core/paths.js';
 import { nowIso } from '../core/time.js';
 import { internalGitCommit, projectGitHead } from '../git/internalGit.js';
 import { cardHtml, insertIntoSection, NOTE_TYPE_TO_SECTION, readMetadata, replaceMetadata } from '../html/cards.js';
 import { escapeHtml } from '../html/escapeHtml.js';
 import { pageLayout } from '../html/templates.js';
 import { routeContext } from '../routing/router.js';
-import { addClaim, updateClaimsForSession } from '../claims/claimIndex.js';
-import { validateSession } from '../validation/validateWorkspace.js';
+import { addClaim, findClaim, type ClaimStatus, setClaimStatus, updateClaimsForSession } from '../claims/claimIndex.js';
+import { mappedAreasFromFileAreaMap, validateSession } from '../validation/validateWorkspace.js';
 
-export type StartSessionInput = { spec: string; task: string; files: string[] };
+export type StartSessionInput = { spec: string; task: string; files: string[]; forcedAreas?: string[] };
 export type NoteInput = { sessionId: string; type: string; title: string; body: string; why?: string; files?: string[] };
 export type CleanupInput = { sessionId: string; oldClaim?: string; action: string; reason: string };
 
 const REQUIRED_SECTIONS = ['design-decisions', 'spec-interpretations', 'deviations', 'tradeoffs', 'open-questions', 'stale-cleanup'];
-const CLEANUP_ACTION_TO_STATUS: Record<string, string> = {
+const CLEANUP_ACTION_TO_STATUS: Record<string, ClaimStatus> = {
   remove: 'stale',
   supersede: 'superseded',
   'needs-review': 'needs-review',
@@ -29,17 +29,42 @@ function rootRelativeContentPath(...parts: string[]): string {
 }
 
 function normalizeSessionId(sessionId: string): string {
-  return sessionId.endsWith('.html') ? sessionId.slice(0, -5) : sessionId;
+  const id = sessionId.endsWith('.html') ? sessionId.slice(0, -5) : sessionId;
+  if (id.includes('/') || id.includes('\\')) throw new Error(`Invalid session id: ${sessionId}`);
+  return id;
 }
 
-async function findSession(root: string, sessionId: string): Promise<{ absolute: string; contentRelative: string; rootRelative: string; status: 'active' | 'completed' }> {
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function replaceCardStatus(html: string, cardId: string, status: string): string {
+  const pattern = new RegExp(`(<div[^>]*data-card-id=["']${escapeRegex(cardId)}["'][^>]*data-status=["'])[^"']+(["'])`);
+  return html.replace(pattern, `$1${status}$2`);
+}
+
+function safeAffectedAreas(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((area) => {
+    if (typeof area !== 'string') throw new Error(`Invalid affected area id: ${String(area)}`);
+    return assertSafePathSegment('affected area id', area);
+  }))];
+}
+
+export async function findSession(root: string, sessionId: string): Promise<{ id: string; absolute: string; contentRelative: string; rootRelative: string; status: 'active' | 'completed' }> {
   const id = normalizeSessionId(sessionId);
   for (const status of ['active', 'completed'] as const) {
     const contentRelative = `sessions/${status}/${id}.html`;
     const absolute = contentPath(root, contentRelative);
-    if (await exists(absolute)) return { absolute, contentRelative, rootRelative: rootRelativeContentPath(contentRelative), status };
+    if (await exists(absolute)) return { id, absolute, contentRelative, rootRelative: rootRelativeContentPath(contentRelative), status };
   }
   throw new Error(`Session not found: ${sessionId}`);
+}
+
+async function requireActiveSession(root: string, sessionId: string): Promise<{ id: string; absolute: string; contentRelative: string; rootRelative: string; status: 'active' }> {
+  const session = await findSession(root, sessionId);
+  if (session.status !== 'active') throw new Error(`Session is already completed: ${sessionId}`);
+  return { ...session, status: 'active' };
 }
 
 function sessionHtml(input: { id: string; spec: string; task: string; files: string[]; affectedAreas: string[]; projectHead: string | null }): string {
@@ -63,7 +88,9 @@ function sessionHtml(input: { id: string; spec: string; task: string; files: str
 
 export async function startSession(root: string, input: StartSessionInput): Promise<{ id: string; path: string; affectedAreas: string[]; requiredSections: string[] }> {
   const routed = routeContext({ task: input.task || input.spec, files: input.files });
-  const affectedAreas = routed.required.filter((item) => item.type === 'area').map((item) => item.id);
+  const mappedAreas = await mappedAreasFromFileAreaMap(root, input.files);
+  const forcedAreas = (input.forcedAreas ?? []).map((area) => assertSafePathSegment('forced affected area id', area));
+  const affectedAreas = [...new Set([...forcedAreas, ...mappedAreas, ...routed.required.filter((item) => item.type === 'area').map((item) => item.id)])];
   const fallbackAreas = routed.recommended.filter((item) => item.type === 'area').map((item) => item.id);
   const selectedAreas = affectedAreas.length ? affectedAreas : fallbackAreas;
   const id = uniqueId('session', input.task);
@@ -78,7 +105,7 @@ export async function startSession(root: string, input: StartSessionInput): Prom
 export async function addNote(root: string, input: NoteInput): Promise<{ cardId: string; claimId: string; path: string }> {
   const section = NOTE_TYPE_TO_SECTION[input.type];
   if (!section || input.type === 'stale-cleanup') throw new Error(`Unsupported note type: ${input.type}`);
-  const session = await findSession(root, input.sessionId);
+  const session = await requireActiveSession(root, input.sessionId);
   const normalizedSessionId = normalizeSessionId(input.sessionId);
   const html = await readFile(session.absolute, 'utf8');
   const metadata = readMetadata(html);
@@ -112,7 +139,13 @@ export async function addNote(root: string, input: NoteInput): Promise<{ cardId:
 export async function recordCleanup(root: string, input: CleanupInput): Promise<{ cardId: string; path: string }> {
   const status = CLEANUP_ACTION_TO_STATUS[input.action];
   if (!status) throw new Error(`Unsupported cleanup action: ${input.action}`);
-  const session = await findSession(root, input.sessionId);
+  if (input.action !== 'none') {
+    if (!input.oldClaim) throw new Error(`Cleanup action ${input.action} requires --old-claim`);
+    const targetClaim = await findClaim(root, input.oldClaim);
+    if (!targetClaim) throw new Error(`Cleanup target not found: ${input.oldClaim}`);
+    safeContentPath(root, 'claim source_html path', targetClaim.source_html);
+  }
+  const session = await requireActiveSession(root, input.sessionId);
   const html = await readFile(session.absolute, 'utf8');
   const metadata = readMetadata(html);
   const cardId = uniqueId('cleanup', input.action);
@@ -120,20 +153,33 @@ export async function recordCleanup(root: string, input: CleanupInput): Promise<
   const body = input.oldClaim ? `${input.reason} Old claim: ${input.oldClaim}` : input.reason;
   const card = cardHtml({ id: cardId, type: 'stale-cleanup', status, title, body });
   const cards = Array.isArray(metadata.cards) ? metadata.cards as Record<string, unknown>[] : [];
-  cards.push({ id: cardId, type: 'stale-cleanup', action: input.action, status, created_at: nowIso() });
+  cards.push({ id: cardId, type: 'stale-cleanup', action: input.action, status, old_claim: input.oldClaim ?? null, created_at: nowIso() });
   metadata.cards = cards;
   metadata.updated_at = nowIso();
   await writeAtomic(session.absolute, replaceMetadata(insertIntoSection(html, 'stale-cleanup', card), metadata));
+  if (input.action !== 'none') {
+    await setClaimStatus(root, { claimRef: input.oldClaim!, status, supersededBy: input.action === 'supersede' ? cardId : undefined });
+  }
   await internalGitCommit(root, `hitl cleanup: ${input.action} ${input.sessionId}`);
   return { cardId, path: session.rootRelative };
 }
 
 async function appendAreaDeltaLink(root: string, areaId: string, deltaContentRelative: string, sessionId: string): Promise<void> {
-  const page = contentPath(root, 'areas', areaId, 'page.html');
-  if (!(await exists(page))) return;
+  const page = contentPath(root, 'areas', assertSafePathSegment('affected area id', areaId), 'page.html');
+  if (!(await exists(page))) throw new Error(`Missing affected area page: areas/${areaId}/page.html`);
   const html = await readFile(page, 'utf8');
   const link = `<div class="hitl-card" data-hitl-card="true" data-card-id="recent-${escapeHtml(sessionId)}" data-card-type="claim" data-status="pending-human-review"><h3>Recent implementation memory</h3><p><a href="/${escapeHtml(deltaContentRelative.replace(/\.html$/, ''))}">${escapeHtml(deltaContentRelative)}</a></p></div>`;
-  await writeAtomic(page, insertIntoSection(html, 'recent-memory', link));
+  const withoutEmptyState = html.replace('<p class="muted">No finalized implementation memory yet.</p>', '');
+  await writeAtomic(page, insertIntoSection(withoutEmptyState, 'recent-memory', link));
+}
+
+async function requireAffectedAreaPages(root: string, affectedAreas: string[]): Promise<void> {
+  const missing: string[] = [];
+  for (const area of affectedAreas) {
+    const page = contentPath(root, 'areas', area, 'page.html');
+    if (!(await exists(page))) missing.push(`areas/${area}/page.html`);
+  }
+  if (missing.length) throw new Error(`Cannot finalize session because affected area pages are missing:\n${missing.join('\n')}`);
 }
 
 export async function finalizeSession(root: string, sessionId: string): Promise<{ completedPath: string; deltaPath: string }> {
@@ -143,14 +189,23 @@ export async function finalizeSession(root: string, sessionId: string): Promise<
   if (session.status !== 'active') throw new Error(`Session is already completed: ${sessionId}`);
   let html = await readFile(session.absolute, 'utf8');
   const metadata = readMetadata(html);
-  const id = String(metadata.id ?? sessionId);
-  const affectedAreas = Array.isArray(metadata.affected_areas) ? metadata.affected_areas as string[] : [];
+  const id = session.id;
+  const affectedAreas = safeAffectedAreas(metadata.affected_areas);
+  await requireAffectedAreaPages(root, affectedAreas);
+  metadata.id = id;
   metadata.status = 'completed';
   metadata.updated_at = nowIso();
+  const promotedCardIds: string[] = [];
   if (Array.isArray(metadata.cards)) {
-    metadata.cards = (metadata.cards as Record<string, unknown>[]).map((card) => ({ ...card, status: card.type === 'stale-cleanup' ? card.status : 'pending-human-review' }));
+    metadata.cards = (metadata.cards as Record<string, unknown>[]).map((card) => {
+      if (card.status === 'agent-draft' && card.type !== 'stale-cleanup') {
+        promotedCardIds.push(String(card.id));
+        return { ...card, status: 'pending-human-review' };
+      }
+      return card;
+    });
   }
-  html = html.replaceAll('data-status="agent-draft"', 'data-status="pending-human-review"');
+  for (const cardId of promotedCardIds) html = replaceCardStatus(html, cardId, 'pending-human-review');
   html = replaceMetadata(html, metadata);
   const completedContentRelative = `sessions/completed/${id}.html`;
   const completedAbsolute = contentPath(root, completedContentRelative);

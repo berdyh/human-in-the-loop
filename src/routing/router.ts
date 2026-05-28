@@ -1,8 +1,8 @@
-import { DEFAULT_AREAS, DEFAULT_TASKS } from '../html/templates.js';
+import { DEFAULT_AREAS, DEFAULT_DECISIONS, DEFAULT_TASKS } from '../html/templates.js';
 
 export type ContextItem = {
   id: string;
-  type: 'area' | 'task';
+  type: 'area' | 'task' | 'decision';
   path: string;
   confidence: number;
   reason: string;
@@ -150,5 +150,25 @@ export function routeContext(input: RouteContextInput): RouteContextResult {
     else if (item.confidence >= 0.32) recommended.push(item);
     else possible.push(item);
   }
+
+  const relatedDecisionItems = new Map<string, ContextItem>();
+  for (const item of [...required, ...recommended]) {
+    const relatedDecisionIds = item.type === 'area'
+      ? DEFAULT_AREAS.find((area) => area.id === item.id)?.related_decisions ?? []
+      : DEFAULT_TASKS.find((task) => task.id === item.id)?.related_decisions ?? [];
+    for (const decisionId of relatedDecisionIds) {
+      if (!DEFAULT_DECISIONS.some((decision) => decision.id === decisionId)) continue;
+      const decision: ContextItem = {
+        id: decisionId,
+        type: 'decision',
+        path: `.humanintheloop/content/decisions/${decisionId}.html`,
+        confidence: Math.min(0.61, Math.max(0.32, item.confidence - 0.12)),
+        reason: `related decision for ${item.type} ${item.id}`
+      };
+      const existing = relatedDecisionItems.get(decisionId);
+      if (!existing || decision.confidence > existing.confidence) relatedDecisionItems.set(decisionId, decision);
+    }
+  }
+  recommended.push(...relatedDecisionItems.values());
   return { required: sortItems(required), recommended: sortItems(recommended), possible: sortItems(possible) };
 }
