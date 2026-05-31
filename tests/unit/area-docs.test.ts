@@ -32,6 +32,12 @@ const expected: Array<{ kind: AreaDocKind; path: string; route: string; snippets
     snippets: ['Screen Mental Model', 'User Flows + Entry Points', 'State Matrix', 'Accessibility + Interaction Notes']
   },
   {
+    kind: 'user-journey',
+    path: '.humanintheloop/content/areas/frontend-dashboard/journey.html',
+    route: '/areas/frontend-dashboard/journey',
+    snippets: ['Journey Mental Model', 'Frontend / Backend Trace', 'Connection Status Matrix', 'Persona -> trigger -> visible result']
+  },
+  {
     kind: 'ops-compliance',
     path: '.humanintheloop/content/areas/ops-compliance/ops.html',
     route: '/areas/ops-compliance/ops',

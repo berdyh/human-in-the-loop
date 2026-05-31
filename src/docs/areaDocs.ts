@@ -8,7 +8,7 @@ import { startSession } from '../sessions/sessionStore.js';
 import { mappedAreasFromFileAreaMap } from '../validation/validateWorkspace.js';
 import { ensureWorkspace } from '../workspace/init.js';
 
-export const AREA_DOC_KINDS = ['database', 'api-surface', 'source-connector', 'retrieval', 'frontend-screen', 'ops-compliance'] as const;
+export const AREA_DOC_KINDS = ['database', 'api-surface', 'source-connector', 'retrieval', 'frontend-screen', 'user-journey', 'ops-compliance'] as const;
 export type AreaDocKind = typeof AREA_DOC_KINDS[number];
 
 export type AreaDocsInput = {
@@ -79,14 +79,14 @@ function flowSvg(label: string, steps: string[]): string {
     const x = 28 + index * (boxWidth + gap);
     const nextX = x + boxWidth;
     const arrow = index < steps.length - 1 && index < 3
-      ? `<line x1="${nextX}" y1="88" x2="${nextX + gap - 8}" y2="88" stroke="#0f766e" stroke-width="2"/><path d="M ${nextX + gap - 8} 88 l -8 -5 v 10 z" fill="#0f766e"/>`
+      ? `<line x1="${nextX}" y1="88" x2="${nextX + gap - 8}" y2="88" stroke="var(--accent)" stroke-width="2"/><path d="M ${nextX + gap - 8} 88 l -8 -5 v 10 z" fill="var(--accent)"/>`
       : '';
-    return `<rect x="${x}" y="48" width="${boxWidth}" height="80" rx="12" fill="#ecfeff" stroke="#0f766e"/>
-      <text x="${x + boxWidth / 2}" y="84" text-anchor="middle" font-size="14">${escapeHtml(step)}</text>
-      <text x="${x + boxWidth / 2}" y="106" text-anchor="middle" font-size="12" fill="#607086">Fill from evidence</text>
+    return `<rect x="${x}" y="48" width="${boxWidth}" height="80" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+      <text x="${x + boxWidth / 2}" y="84" text-anchor="middle" font-family="var(--font-sans), sans-serif" font-size="14" font-weight="600" fill="var(--text)">${escapeHtml(step)}</text>
+      <text x="${x + boxWidth / 2}" y="106" text-anchor="middle" font-family="var(--font-sans), sans-serif" font-size="11" fill="var(--text-muted)">Fill from evidence</text>
       ${arrow}`;
   }).join('\n');
-  return `<svg viewBox="0 0 ${width} 180" role="img" aria-label="${escapeHtml(label)}" style="width:100%;max-width:${width}px;border:1px solid #d8dee9;border-radius:14px;background:#fff">${boxes}</svg>`;
+  return `<svg viewBox="0 0 ${width} 180" role="img" aria-label="${escapeHtml(label)}" style="width:100%;max-width:${width}px;border:1px solid var(--border);border-radius:8px;background:var(--surface);transition:all 0.2s ease;">${boxes}</svg>`;
 }
 
 const commonDebt = table(
@@ -235,6 +235,35 @@ export const AREA_DOC_TEMPLATES: Record<AreaDocKind, AreaDocTemplate> = {
       { id: 'known-shortcuts', title: 'Known Shortcuts / Technical Debt', body: commonDebt }
     ]
   },
+  'user-journey': {
+    kind: 'user-journey',
+    title: 'User Journey Trace Notes',
+    summary: 'Domain-neutral trace notes for persona -> trigger -> backend workflow -> persistence -> visible result.',
+    defaultArea: 'frontend-dashboard',
+    filename: 'journey.html',
+    routeSlug: 'journey',
+    generatedMarker: 'user-journey',
+    linkTitle: 'User Journey Trace Notes',
+    linkLabel: 'User journey trace notes',
+    defaultEvidence: ['src/app/**', 'app/**', 'src/pages/**', 'src/components/**', 'src/routes/**', 'src/api/**', 'src/services/**', 'src/jobs/**', 'db/**', 'prisma/**', 'tests/e2e/**', 'docs/product/**'],
+    legendTitle: 'Trace Shape',
+    legendBody: '<span class="panel">Persona -> trigger -> visible result</span> expands to first valuable outcome -> frontend trigger -> backend workflow -> sequential capabilities -> persistence -> visible result. <span class="panel">Unknown</span> is acceptable until evidence confirms the connection.',
+    sessionSpec: 'Create domain-neutral user journey trace notes from UI, backend, service/job, database, test, and product evidence without inventing behavior.',
+    sessionTask: (areaId) => `Document user journey trace evidence and gaps for ${areaId}`,
+    missingQuestion: (missing) => ['Confirm journey evidence source paths', `Missing: ${missing.join(', ')}`, 'Use --code/--product/--evidence to point HITL at UI, backend, service/job, database, test, and product evidence.'],
+    defaultQuestion: ['Confirm journey source of truth', 'The scaffold records evidence inputs but does not infer user-flow behavior automatically.', 'Fill after inspecting UI, backend, service/job, database, test, and product evidence.'],
+    sections: [
+      { id: 'journey-mental-model', title: 'Journey Mental Model', body: cards([['Persona', 'Who is trying to make progress and what context they bring.'], ['First valuable outcome', 'The first visible result that proves the workflow mattered.'], ['Success signal', 'UI, data, or operational evidence that confirms completion.']]) },
+      { id: 'entry-auth-context', title: 'Entry + Auth Context', body: table(['Entry Point', 'Auth / Session Behavior', 'Permission Boundary', 'Evidence', 'Gap'], [['Fill from evidence', 'Session/token/service identity behavior', 'Role, tenant, org, project, or public boundary', 'Route/component/middleware/test path', 'Unknown until confirmed']]) },
+      { id: 'primary-user-action', title: 'Primary User Action', body: table(['Action', 'User Intent', 'UI Trigger', 'Validation / Guardrail', 'Next System Step'], [['First meaningful action', 'Persona-specific goal', 'Button/form/nav/shortcut/event handler', 'Client or server check', 'Route/API/job/service handoff']]) },
+      { id: 'frontend-backend-trace', title: 'Frontend / Backend Trace', body: table(['Journey Step', 'User Intent', 'Frontend Evidence', 'Backend Evidence', 'DB Evidence', 'Capability / Service', 'Connection Status', 'Gap'], [['Fill from evidence', 'Persona-specific goal', 'Component, route, hook, event handler', 'Route, controller, service, job', 'Table/model/query or No DB touch', 'Tool/service/capability or None', 'Connected / Partial / Not Connected / Unknown', 'Missing handoff, ownership check, persistence, result path, etc.']]) },
+      { id: 'capability-sequence', title: 'Capability Sequence', body: flowSvg('Persona -> trigger -> visible result trace placeholder', ['Persona', 'Frontend trigger', 'Backend workflow', 'Visible result']) },
+      { id: 'persistence-map', title: 'Persistence Map', body: table(['Read / Write', 'Table / Model / Query', 'Ownership Field', 'Lifecycle State', 'Evidence', 'Gap'], [['Fill from evidence', 'Table/model/query or No DB touch', 'user_id/org_id/project_id/etc.', 'created/queued/running/done/error/etc.', 'Code/test/schema path', 'Unknown ownership or state transition']]) },
+      { id: 'result-return-path', title: 'Result Return Path', body: table(['Return Mechanism', 'Trigger', 'Payload / State', 'Render Evidence', 'Failure / Empty Behavior'], [['Fetch, polling, subscription, redirect, or server render', 'User action, job completion, cache invalidation, or route load', 'DTO/model/view state', 'Component/hook/route/test path', 'Retry, stale view, empty state, or error state']]) },
+      { id: 'connection-status-matrix', title: 'Connection Status Matrix', body: table(['Status', 'Meaning', 'Required Evidence', 'Action'], [['Connected', 'Frontend, backend, persistence, and result path are all evidenced', 'UI + API/service + DB/result evidence', 'Keep as current behavior'], ['Partial', 'At least one handoff is evidenced but another is missing', 'Known path plus missing link', 'Record gap and owner'], ['Not Connected', 'Expected handoff has no implementation evidence', 'Negative search or missing source', 'Do not claim behavior works'], ['Unknown', 'Evidence has not been inspected yet', 'Pending code/spec/test path', 'Inspect before filling claims']]) },
+      { id: 'known-shortcuts', title: 'Known Shortcuts / Technical Debt', body: commonDebt }
+    ]
+  },
   'ops-compliance': {
     kind: 'ops-compliance',
     title: 'Ops / Compliance Notes',
@@ -352,8 +381,8 @@ async function areaDocPageUpdate(root: string, areaId: string, template: AreaDoc
   if (html.includes(route)) return null;
   const linkSection = `<section data-section="${escapeHtml(template.routeSlug)}-notes"><h2>${escapeHtml(template.linkTitle)}</h2><p><a href="${escapeHtml(route)}">${escapeHtml(template.linkLabel)}</a></p></section>`;
   const updated = html.includes('<section id="recent-memory"')
-    ? html.replace('<section id="recent-memory"', `${linkSection}\n<section id="recent-memory"`)
-    : html.replace('</main>', `${linkSection}\n  </main>`);
+    ? html.replace('<section id="recent-memory"', () => `${linkSection}\n<section id="recent-memory"`)
+    : html.replace('</main>', () => `${linkSection}\n  </main>`);
   if (updated === html) throw new Error(`Could not insert area docs link into areas/${areaId}/page.html`);
   return { path: areaPage, html: updated };
 }
