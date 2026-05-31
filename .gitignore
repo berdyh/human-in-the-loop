@@ -3,3 +3,4 @@ dist/
 .humanintheloop/
 *.log
 docs.local/
+.gstack/

@@ -1,5 +1,31 @@
 # Human in the Loop MVP — Codex Implementation Packet
 
+## Install And Update
+
+From this source checkout:
+
+```bash
+npm install
+npm run build
+node dist/cli.js install-agents --target all
+```
+
+In a repo that already uses HITL, refresh managed workspace structure/design and update the local Codex/Claude Code skill with:
+
+```bash
+hitl update --workspace --agents
+```
+
+`hitl update --workspace` is the explicit migration path after HITL design or structure changes. It refreshes managed `.humanintheloop/` files while preserving non-managed human-authored files.
+
+For user-flow evidence reviews, create the generic journey scaffold with:
+
+```bash
+hitl area-docs --kind user-journey --area frontend-dashboard
+```
+
+The generated page lives at `.humanintheloop/content/areas/<area>/journey.html` and is served at `/areas/<area>/journey`.
+
 Use this packet as a multi-file implementation brief.
 
 The intended workflow:

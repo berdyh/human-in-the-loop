@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { readJson, writeJsonAtomic } from '../core/json.js';
 import { assertSafeContentRelativePath, contentPath, exists, safeContentPath, writeAtomic } from '../core/paths.js';
 import { nowIso } from '../core/time.js';
-import { readMetadata, replaceMetadata } from '../html/cards.js';
+import { readMetadata, replaceCardStatus, replaceMetadata } from '../html/cards.js';
 import { escapeHtml } from '../html/escapeHtml.js';
 import { pageLayout } from '../html/templates.js';
 
@@ -121,9 +121,7 @@ async function updateClaimSourceHtml(root: string, claim: ClaimRecord, status: C
   const htmlPath = safeContentPath(root, 'claim source_html path', claim.source_html);
   if (!(await exists(htmlPath))) return;
   const html = await readFile(htmlPath, 'utf8');
-  const escapedClaimId = claim.claim_id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const pattern = new RegExp(`(<div[^>]*data-card-id=["']${escapedClaimId}["'][^>]*data-status=["'])[^"']+(["'])`);
-  let updated = pattern.test(html) ? html.replace(pattern, `$1${status}$2`) : html;
+  let updated = replaceCardStatus(html, claim.claim_id, status);
   const metadata = readMetadata(updated);
   if (Array.isArray(metadata.cards)) {
     let changed = false;

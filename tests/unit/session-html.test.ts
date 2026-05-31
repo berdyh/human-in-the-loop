@@ -48,6 +48,8 @@ describe('session HTML workflow', () => {
     expect(completedHtml).toContain('data-status="accepted"');
     expect(completedHtml).toContain('data-status="pending-human-review"');
     expect(completedHtml).toContain('data-card-type="stale-cleanup" data-status="agent-draft"');
+    expect(completedHtml).toContain('status-badge badge-accepted">accepted</span>');
+    expect(completedHtml).toContain('status-badge badge-pending-human-review">pending-human-review</span>');
     expect(completedMetadata.cards.find((card: { id: string }) => card.id === design.claimId)).toMatchObject({ status: 'accepted' });
     expect(completedMetadata.cards.find((card: { id: string }) => card.id === spec.claimId)).toMatchObject({ status: 'pending-human-review' });
     expect(completedMetadata.cards.find((card: { type: string }) => card.type === 'stale-cleanup')).toMatchObject({ status: 'agent-draft' });

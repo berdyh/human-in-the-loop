@@ -27,6 +27,10 @@ async function fetchStatus(url: string) {
   return response.status;
 }
 
+function layoutVersion(html: string): string | undefined {
+  return /data-hitl-layout-version="([^"]+)"/.exec(html)?.[1];
+}
+
 async function reservePort(): Promise<number> {
   return await new Promise((resolvePort, reject) => {
     const probe = createServer();
@@ -57,12 +61,103 @@ async function waitForServer(port: number): Promise<void> {
   throw lastError instanceof Error ? lastError : new Error('Timed out waiting for HITL server');
 }
 
+async function waitForServerStop(port: number): Promise<void> {
+  const deadline = Date.now() + 3000;
+  while (Date.now() < deadline) {
+    try {
+      await fetch(`http://127.0.0.1:${port}/api/status`);
+    } catch {
+      return;
+    }
+    await new Promise((resolveReady) => setTimeout(resolveReady, 50));
+  }
+  throw new Error('Timed out waiting for HITL server to stop');
+}
+
 afterEach(() => {
   server?.kill('SIGTERM');
   server = undefined;
 });
 
 describe('hitl CLI e2e', () => {
+  test('expose records a background site port and close removes stale or active records', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'hitl-port-cleaner-'));
+    runHitl(root, ['init']);
+
+    await mkdir(join(root, '.humanintheloop/runtime'), { recursive: true });
+    await writeFile(
+      join(root, '.humanintheloop/runtime/ports.json'),
+      JSON.stringify({ ports: [{ port: 49999, pid: 999999, started_at: '2026-05-31T00:00:00.000Z', url: 'http://127.0.0.1:49999' }] }, null, 2),
+      'utf8'
+    );
+    expect(runHitl(root, ['close', '--port', '49999'])).toContain('Cleaned stale HITL port record: 49999');
+    await expect(readFile(join(root, '.humanintheloop/runtime/ports.json'), 'utf8')).resolves.toContain('"ports": []');
+
+    const port = await reservePort();
+    const exposeOutput = runHitl(root, ['expose', '--port', String(port)]);
+    expect(exposeOutput).toContain(`Human in the Loop site listening on http://127.0.0.1:${port}`);
+    await waitForServer(port);
+    await expect(readFile(join(root, '.humanintheloop/runtime/ports.json'), 'utf8')).resolves.toContain(`"port": ${port}`);
+
+    const closeOutput = runHitl(root, ['close', '--port', String(port)]);
+    expect(closeOutput).toContain(`Closed HITL port: ${port}`);
+    await waitForServerStop(port);
+    await expect(readFile(join(root, '.humanintheloop/runtime/ports.json'), 'utf8')).resolves.toContain('"ports": []');
+
+    const reusedPidPort = await reservePort();
+    await writeFile(
+      join(root, '.humanintheloop/runtime/ports.json'),
+      JSON.stringify({ ports: [{ port: reusedPidPort, pid: process.pid, started_at: '2026-05-31T00:00:00.000Z', url: `http://127.0.0.1:${reusedPidPort}` }] }, null, 2),
+      'utf8'
+    );
+    const reusedExposeOutput = runHitl(root, ['expose', '--port', String(reusedPidPort)]);
+    expect(reusedExposeOutput).toContain(`Human in the Loop site listening on http://127.0.0.1:${reusedPidPort}`);
+    expect(reusedExposeOutput).not.toContain('already tracked');
+    await waitForServer(reusedPidPort);
+    const reusedCloseOutput = runHitl(root, ['close', '--port', String(reusedPidPort)]);
+    expect(reusedCloseOutput).toContain(`Closed HITL port: ${reusedPidPort}`);
+    await waitForServerStop(reusedPidPort);
+
+    const unregisteredPort = await reservePort();
+    const unregisteredServer = spawn(process.execPath, [cli, 'serve', '--port', String(unregisteredPort)], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+    try {
+      await waitForServer(unregisteredPort);
+      const exposeResult = spawnSync(process.execPath, [cli, 'expose', '--port', String(unregisteredPort)], { cwd: root, encoding: 'utf8' });
+      expect(exposeResult.status).not.toBe(0);
+      expect(exposeResult.stderr).toContain(`Timed out waiting for registered HITL port ${unregisteredPort}`);
+    } finally {
+      unregisteredServer.kill('SIGTERM');
+      await waitForServerStop(unregisteredPort);
+    }
+  });
+
+  test('install-agents and update refresh agent skills and managed HITL pages', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'hitl-update-install-'));
+    const codexSkillsDir = join(root, 'codex-skills');
+    const claudeSkillsDir = join(root, 'claude-skills');
+    runHitl(root, ['init']);
+
+    const projectPath = join(root, '.humanintheloop/content/project.html');
+    const currentProject = await readFile(projectPath, 'utf8');
+    await writeFile(projectPath, currentProject.replace('Default Areas', 'Old Managed Areas'), 'utf8');
+
+    const installOutput = runHitl(root, ['install-agents', '--target', 'all', '--codex-dir', codexSkillsDir, '--claude-dir', claudeSkillsDir]);
+    expect(installOutput).toContain('Installed codex HITL skill');
+    expect(installOutput).toContain('Installed claude HITL skill');
+    await expect(readFile(join(codexSkillsDir, 'hitl/SKILL.md'), 'utf8')).resolves.toContain('name: hitl');
+    await expect(readFile(join(claudeSkillsDir, 'hitl/SKILL.md'), 'utf8')).resolves.toContain('name: hitl');
+
+    await writeFile(join(codexSkillsDir, 'hitl/SKILL.md'), 'stale skill body\n', 'utf8');
+    const updateOutput = runHitl(root, ['update', '--agents', '--workspace', '--target', 'codex', '--codex-dir', codexSkillsDir]);
+    expect(updateOutput).toContain('Updated codex HITL skill');
+    expect(updateOutput).toContain('Updated managed HITL workspace files');
+    await expect(readFile(join(codexSkillsDir, 'hitl/SKILL.md'), 'utf8')).resolves.toContain('Start Every HITL-Managed Task');
+
+    const refreshedProject = await readFile(projectPath, 'utf8');
+    expect(refreshedProject).toContain('Default Areas');
+    expect(refreshedProject).not.toContain('Old Managed Areas');
+  });
+
   test('clean temp directory workflow and site routes', async () => {
     const root = await mkdtemp(join(tmpdir(), 'hitl-e2e-'));
     runHitl(root, ['init']);
@@ -70,8 +165,18 @@ describe('hitl CLI e2e', () => {
     const port = await reservePort();
     server = spawn(process.execPath, [cli, 'serve', '--port', String(port)], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
     await waitForServer(port);
-    await expect(fetchText(`http://127.0.0.1:${port}/`)).resolves.toContain('Human in the Loop');
-    await expect(fetchText(`http://127.0.0.1:${port}/graph`)).resolves.toContain('Implementation Memory Graph');
+    const projectHtml = await fetchText(`http://127.0.0.1:${port}/`);
+    const historyHtml = await fetchText(`http://127.0.0.1:${port}/history`);
+    expect(projectHtml).toContain('Human in the Loop');
+    expect(historyHtml).toContain('class="history-log"');
+    expect(historyHtml).toContain('class="history-entry"');
+    expect(historyHtml).toContain('data-page="history"');
+    expect(projectHtml).toContain('class="panel panel-link" href="/areas/data-spine"');
+    expect(layoutVersion(projectHtml)).toBeTruthy();
+    expect(layoutVersion(historyHtml)).toBe(layoutVersion(projectHtml));
+    const graphHtml = await fetchText(`http://127.0.0.1:${port}/graph`);
+    expect(graphHtml).toContain('Implementation Memory Graph');
+    expect(graphHtml).toContain('data-section="graph-map"');
     await expect(fetchText(`http://127.0.0.1:${port}/areas/source-ingestion`)).resolves.toContain('Source Ingestion');
     await expect(fetchText(`http://127.0.0.1:${port}/areas/source-ingestion/agent-context`)).resolves.toContain('Source Ingestion Agent Context');
     await expect(fetchText(`http://127.0.0.1:${port}/tasks/add-source-connector/agent-context`)).resolves.toContain('Add Source Connector Agent Context');
@@ -106,6 +211,18 @@ describe('hitl CLI e2e', () => {
     const areaSessionContext = runHitl(root, ['context', '--session', areaSessionId!, '--json']);
     expect(JSON.parse(areaSessionContext).required.map((item: { id: string }) => item.id)).toContain('api-surfaces');
     expect(runHitl(root, ['history'])).toContain('hitl area-docs: api-surface');
+
+    const journeyDocs = runHitl(root, ['area-docs', '--kind', 'user-journey', '--code', 'src/pages/onboarding.tsx', '--product', 'docs/user-flow.md']);
+    const journeySessionId = /Session:\s+(\S+)/.exec(journeyDocs)?.[1];
+    expect(journeyDocs).toContain('.humanintheloop/content/areas/frontend-dashboard/journey.html');
+    expect(journeyDocs).toContain('/areas/frontend-dashboard/journey');
+    expect(journeySessionId).toBeTruthy();
+    await expect(fetchText(`http://127.0.0.1:${port}/areas/frontend-dashboard/journey`)).resolves.toContain('User Journey Trace Notes');
+    await expect(fetchText(`http://127.0.0.1:${port}/areas/frontend-dashboard/journey`)).resolves.toContain('Connection Status Matrix');
+    await expect(fetchText(`http://127.0.0.1:${port}/areas/frontend-dashboard`)).resolves.toContain('/areas/frontend-dashboard/journey');
+    const journeySessionContext = runHitl(root, ['context', '--session', journeySessionId!, '--json']);
+    expect(JSON.parse(journeySessionContext).required.map((item: { id: string }) => item.id)).toContain('frontend-dashboard');
+    expect(runHitl(root, ['history'])).toContain('hitl area-docs: user-journey');
 
     const start = runHitl(root, ['start', '--spec', 'Add Crunchbase API ingestion for company profiles', '--task', 'connect a new provider', '--files', 'src/connectors/crunchbase.ts']);
     const sessionId = /Session:\s+(\S+)/.exec(start)?.[1];

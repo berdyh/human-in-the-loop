@@ -4,7 +4,7 @@ import { uniqueId } from '../core/ids.js';
 import { assertSafePathSegment, contentPath, exists, safeContentPath, writeAtomic } from '../core/paths.js';
 import { nowIso } from '../core/time.js';
 import { internalGitCommit, projectGitHead } from '../git/internalGit.js';
-import { cardHtml, insertIntoSection, NOTE_TYPE_TO_SECTION, readMetadata, replaceMetadata } from '../html/cards.js';
+import { cardHtml, insertIntoSection, NOTE_TYPE_TO_SECTION, readMetadata, replaceCardStatus, replaceMetadata } from '../html/cards.js';
 import { escapeHtml } from '../html/escapeHtml.js';
 import { pageLayout } from '../html/templates.js';
 import { routeContext } from '../routing/router.js';
@@ -32,15 +32,6 @@ function normalizeSessionId(sessionId: string): string {
   const id = sessionId.endsWith('.html') ? sessionId.slice(0, -5) : sessionId;
   if (id.includes('/') || id.includes('\\')) throw new Error(`Invalid session id: ${sessionId}`);
   return id;
-}
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function replaceCardStatus(html: string, cardId: string, status: string): string {
-  const pattern = new RegExp(`(<div[^>]*data-card-id=["']${escapeRegex(cardId)}["'][^>]*data-status=["'])[^"']+(["'])`);
-  return html.replace(pattern, `$1${status}$2`);
 }
 
 function safeAffectedAreas(value: unknown): string[] {
