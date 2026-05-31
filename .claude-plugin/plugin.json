@@ -1,0 +1,9 @@
+{
+  "name": "human-in-the-loop",
+  "version": "0.3.0",
+  "description": "Repo-local implementation memory for coding-agent workflows using the hitl CLI. Use when working with .humanintheloop/, starting or finishing implementation work, or adopting HITL in an existing codebase.",
+  "author": {
+    "name": "berdyh",
+    "email": "info@flott.uz"
+  }
+}

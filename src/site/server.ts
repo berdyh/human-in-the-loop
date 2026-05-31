@@ -2,10 +2,10 @@ import { createServer, type Server } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { assertSafePathSegment, contentPath, exists } from '../core/paths.js';
 import { internalGitLog } from '../git/internalGit.js';
-import { escapeHtml } from '../html/escapeHtml.js';
-import { pageLayout } from '../html/templates.js';
+import { historyPage } from '../html/historyPage.js';
 import { validateWorkspace } from '../validation/validateWorkspace.js';
 import { areaDocFileForRouteSlug } from '../docs/areaDocs.js';
+import { registerHitlPort } from './ports.js';
 
 function routeSegment(kind: string, value: string | undefined): string | null {
   if (!value) return null;
@@ -66,13 +66,13 @@ export function createHitlServer(root: string): Server {
       if (url.pathname === '/api/status') {
         const status = await validateWorkspace(root);
         response.writeHead(200, { 'content-type': 'application/json' });
-        response.end(JSON.stringify({ ok: status.ok, errors: status.errors, workspace: '.humanintheloop' }));
+        response.end(JSON.stringify({ hitl: true, server_pid: process.pid, ok: status.ok, errors: status.errors, workspace: '.humanintheloop' }));
         return;
       }
       if (url.pathname === '/history') {
         const log = await internalGitLog(root);
         response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-        response.end(pageLayout('HITL History', `<h1>HITL History</h1><pre>${escapeHtml(log || 'No internal history yet.')}</pre>`, { type: 'history' }));
+        response.end(historyPage(log));
         return;
       }
       const path = routeToContentPath(root, url.pathname);
@@ -90,8 +90,16 @@ export function createHitlServer(root: string): Server {
   });
 }
 
-export async function serve(root: string, port: number): Promise<Server> {
+export async function serve(root: string, port: number, options: { register?: boolean } = {}): Promise<Server> {
   const server = createHitlServer(root);
   await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve));
+  if (options.register) {
+    await registerHitlPort(root, {
+      port,
+      pid: process.pid,
+      started_at: new Date().toISOString(),
+      url: `http://127.0.0.1:${port}`
+    });
+  }
   return server;
 }

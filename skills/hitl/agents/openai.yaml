@@ -1,0 +1,4 @@
+interface:
+  display_name: "HITL"
+  short_description: "Use repo-local implementation memory"
+  default_prompt: "Use $hitl to keep implementation memory current while working in this repository."

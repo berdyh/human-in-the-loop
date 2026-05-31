@@ -1,0 +1,14 @@
+{
+  "name": "local",
+  "owner": {
+    "name": "berdyh",
+    "email": "info@flott.uz"
+  },
+  "plugins": [
+    {
+      "name": "human-in-the-loop",
+      "source": "./",
+      "description": "Repo-local implementation memory for coding-agent workflows using the hitl CLI."
+    }
+  ]
+}

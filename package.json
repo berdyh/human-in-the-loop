@@ -1,6 +1,6 @@
 {
   "name": "human-in-the-loop",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Repo-local HTML-native implementation memory for coding-agent workflows.",
   "type": "module",
   "bin": {
@@ -8,6 +8,8 @@
   },
   "files": [
     "dist",
+    "skills",
+    ".claude-plugin",
     "README.md"
   ],
   "scripts": {

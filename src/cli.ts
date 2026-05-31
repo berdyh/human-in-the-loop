@@ -1,5 +1,8 @@
 #!/usr/bin/env node
+import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { dirname } from 'node:path';
 import { Command } from 'commander';
 import { ensureWorkspace } from './workspace/init.js';
 import { routeContext, type ContextItem, type RouteContextResult } from './routing/router.js';
@@ -13,6 +16,8 @@ import { assertSafePathSegment, exists, hitlPath } from './core/paths.js';
 import { readMetadata } from './html/cards.js';
 import { AREA_DOC_KINDS, createAreaDocs } from './docs/areaDocs.js';
 import { createDatabaseDocs } from './docs/dbDocs.js';
+import { cleanHitlPortRegistry, closeHitlPorts, readHitlPortRegistry, unregisterHitlPid, verifyRegisteredHitlServer } from './site/ports.js';
+import { installAgentSkills, parseAgentTargets } from './agents/install.js';
 
 function parseFiles(value?: string): string[] {
   return value ? value.split(/[\s,]+/).map((file) => file.trim()).filter(Boolean) : [];
@@ -27,6 +32,45 @@ function printValidation(prefix: string, result: { ok: boolean; errors: string[]
     for (const error of result.errors) console.error(`- ${error}`);
     process.exitCode = 1;
   }
+}
+
+function parsePort(value: string | number): number {
+  const port = Number(value);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`Invalid port: ${value}`);
+  return port;
+}
+
+function packageRoot(): string {
+  return dirname(dirname(fileURLToPath(import.meta.url)));
+}
+
+async function installAgentsFromOptions(options: { target?: string; codexDir?: string; claudeDir?: string }): Promise<void> {
+  const installed = await installAgentSkills({
+    packageRoot: packageRoot(),
+    targets: parseAgentTargets(options.target),
+    codexSkillsDir: options.codexDir,
+    claudeSkillsDir: options.claudeDir
+  });
+  for (const result of installed) {
+    const verb = result.action === 'installed' ? 'Installed' : 'Updated';
+    console.log(`${verb} ${result.target} HITL skill: ${result.path}`);
+  }
+}
+
+async function waitForExposedServer(root: string, port: number): Promise<void> {
+  const deadline = Date.now() + 3000;
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    try {
+      const record = (await readHitlPortRegistry(root)).find((candidate) => candidate.port === port);
+      if (record && await verifyRegisteredHitlServer(record)) return;
+      lastError = new Error(`No verified HITL registry entry for port ${port}`);
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolveReady) => setTimeout(resolveReady, 50));
+  }
+  throw lastError instanceof Error ? new Error(`Timed out waiting for registered HITL port ${port}: ${lastError.message}`) : new Error(`Timed out waiting for registered HITL port ${port}`);
 }
 
 function sortContextItems(items: ContextItem[]): ContextItem[] {
@@ -83,17 +127,76 @@ async function contextWithFileAreaMap(root: string, task: string, files: string[
 }
 
 const program = new Command();
-program.name('hitl').description('Human in the Loop implementation-memory CLI').version('0.1.0');
+program.name('hitl').description('Human in the Loop implementation-memory CLI').version('0.3.0');
 
 program.command('init').description('Create .humanintheloop workspace').action(async () => {
   await ensureWorkspace(process.cwd());
   console.log('Initialized Human in the Loop workspace at .humanintheloop');
 });
 
-program.command('serve').option('--port <port>', 'port', '4317').description('Serve local HITL website').action(async (options) => {
-  const port = Number(options.port);
-  await serve(process.cwd(), port);
+program.command('serve').option('--port <port>', 'port', '4317').option('--register', 'record this server for hitl close').description('Serve local HITL website').action(async (options) => {
+  const port = parsePort(options.port);
+  await serve(process.cwd(), port, { register: Boolean(options.register) });
   console.log(`Human in the Loop site listening on http://127.0.0.1:${port}`);
+});
+
+program.command('expose').option('--port <port>', 'port', '4317').description('Expose local HITL website in the background').action(async (options) => {
+  const root = process.cwd();
+  const port = parsePort(options.port);
+  await ensureWorkspace(root);
+  await cleanHitlPortRegistry(root);
+  const existing = (await readHitlPortRegistry(root)).find((record) => record.port === port);
+  if (existing) {
+    if (await verifyRegisteredHitlServer(existing)) {
+      console.log(`Human in the Loop site already tracked on http://127.0.0.1:${port}`);
+      return;
+    }
+    await unregisterHitlPid(root, existing.pid);
+  }
+  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), 'serve', '--port', String(port), '--register'], {
+    cwd: root,
+    detached: true,
+    stdio: 'ignore'
+  });
+  child.unref();
+  await waitForExposedServer(root, port);
+  console.log(`Human in the Loop site listening on http://127.0.0.1:${port}`);
+});
+
+program.command('install-agents')
+  .option('--target <target>', 'codex, claude, or all', 'all')
+  .option('--codex-dir <path>', 'Codex skills directory')
+  .option('--claude-dir <path>', 'Claude Code skills directory')
+  .description('Install or update bundled HITL skills for Codex and Claude Code')
+  .action(async (options) => {
+    await installAgentsFromOptions(options);
+  });
+
+program.command('update')
+  .option('--workspace', 'refresh managed .humanintheloop structure and design files')
+  .option('--agents', 'install or update bundled HITL skills')
+  .option('--target <target>', 'codex, claude, or all', 'all')
+  .option('--codex-dir <path>', 'Codex skills directory')
+  .option('--claude-dir <path>', 'Claude Code skills directory')
+  .description('Update HITL workspace files and/or local agent skills')
+  .action(async (options) => {
+    const updateWorkspace = Boolean(options.workspace) || !options.agents;
+    if (updateWorkspace) {
+      await ensureWorkspace(process.cwd(), {
+        refreshManaged: true,
+        commitMessage: 'hitl update: refresh managed workspace files'
+      });
+      console.log('Updated managed HITL workspace files');
+    }
+    if (options.agents) await installAgentsFromOptions(options);
+  });
+
+program.command('close').option('--port <port>', 'only close one registered HITL port').description('Close background HITL website ports and clean stale records').action(async (options) => {
+  const port = options.port === undefined ? undefined : parsePort(options.port);
+  const result = await closeHitlPorts(process.cwd(), { port });
+  for (const record of result.cleanedStale) console.log(`Cleaned stale HITL port record: ${record.port}`);
+  for (const record of result.closed) console.log(`Closed HITL port: ${record.port}`);
+  if (!result.cleanedStale.length && !result.closed.length) console.log(port ? `No HITL port record found for ${port}` : 'No HITL ports to close');
 });
 
 program.command('start')
