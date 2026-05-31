@@ -1,4 +1,6 @@
-import { escapeHtml, safeMetadataJson } from './escapeHtml.js';
+import { escapeHtml } from './escapeHtml.js';
+export { HITL_LAYOUT_VERSION, metadataScript, pageLayout } from './layout.js';
+import { pageLayout } from './layout.js';
 
 export type AreaDefinition = {
   id: string;
@@ -138,87 +140,143 @@ export const DEFAULT_DECISIONS = [
   { id: 'company-indexing-strategy', title: 'Company Indexing Strategy', summary: 'Normalize company records before indexing or retrieval use.' }
 ];
 
-export function metadataScript(metadata: unknown): string {
-  return `<script type="application/hitl+json">\n${safeMetadataJson(metadata)}\n</script>`;
+function panel(title: string, href: string, summary: string, tag?: string, tagClass?: string): string {
+  const label = tag ? `<span class="node-tag ${escapeHtml(tagClass ?? '')}">${escapeHtml(tag)}</span>` : '';
+  return `<a class="panel panel-link" href="${escapeHtml(href)}"><h3>${label}<span class="panel-title">${escapeHtml(title)}</span></h3><p>${escapeHtml(summary)}</p></a>`;
 }
 
-export function pageLayout(title: string, body: string, metadata: unknown): string {
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${escapeHtml(title)}</title>
-  <style>
-    :root { color-scheme: light; --ink:#172033; --muted:#667085; --line:#d8dee9; --card:#ffffff; --wash:#f6f8fb; --accent:#0f766e; }
-    body { margin:0; font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif; background: radial-gradient(circle at top left, #ecfeff, transparent 28rem), var(--wash); color: var(--ink); line-height: 1.55; }
-    header { border-bottom:1px solid var(--line); background:rgba(255,255,255,.88); backdrop-filter: blur(8px); padding:18px 28px; position:sticky; top:0; }
-    nav { display:flex; gap:14px; flex-wrap:wrap; font-family: ui-sans-serif, system-ui, sans-serif; font-size:14px; }
-    nav a { color:#0f766e; text-decoration:none; font-weight:700; }
-    main { max-width:1040px; margin:34px auto; padding:0 20px 60px; }
-    h1,h2,h3 { line-height:1.15; }
-    h1 { font-size: clamp(2rem, 5vw, 4rem); letter-spacing:-.045em; margin:.2em 0 .35em; }
-    h2 { margin-top:1.8em; }
-    section, .hitl-card, .panel { background:rgba(255,255,255,.92); border:1px solid var(--line); border-radius:18px; padding:18px 20px; margin:16px 0; box-shadow:0 10px 30px rgba(23,32,51,.05); }
-    .hitl-card { border-left:5px solid var(--accent); }
-    .muted { color:var(--muted); }
-    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; }
-    code, pre { background:#eef2f7; border-radius:8px; padding:2px 6px; }
-    pre { overflow:auto; padding:14px; }
-    a { color:#0f766e; }
-  </style>
-</head>
-<body>
-  <header>
-    <nav>
-      <a href="/">Project</a>
-      <a href="/graph">Graph</a>
-      <a href="/review">Review</a>
-      <a href="/stale">Stale</a>
-      <a href="/questions">Questions</a>
-      <a href="/history">History</a>
-    </nav>
-  </header>
-  <main>
-${body}
-  </main>
-${metadataScript(metadata)}
-</body>
-</html>
-`;
+function listItems(ids: string[], pathPrefix: string): string {
+  return ids.map((id) => `<li><a href="${pathPrefix}/${escapeHtml(id)}">${escapeHtml(id)}</a></li>`).join('') || '<li class="muted">None.</li>';
+}
+
+function taskTitle(id: string): string {
+  return DEFAULT_TASKS.find((task) => task.id === id)?.title ?? id;
+}
+
+function decisionTitle(id: string): string {
+  return DEFAULT_DECISIONS.find((decision) => decision.id === id)?.title ?? id;
+}
+
+function chipList(ids: string[], pathPrefix: string, labelForId: (id: string) => string, emptyText: string): string {
+  if (ids.length === 0) return `<p class="muted">${escapeHtml(emptyText)}</p>`;
+  return `<div class="chip-list">${ids
+    .map((id) => `<a class="graph-chip" href="${pathPrefix}/${escapeHtml(id)}">${escapeHtml(labelForId(id))}</a>`)
+    .join('')}</div>`;
+}
+
+function areaGraphRow(area: AreaDefinition): string {
+  return `<div class="graph-row">
+  <a class="graph-node" href="/areas/${escapeHtml(area.id)}">
+    <span class="node-tag area-tag">Area</span>
+    <span class="panel-title">${escapeHtml(area.title)}</span>
+    <span class="muted">${escapeHtml(area.summary)}</span>
+  </a>
+  <div class="graph-links">
+    <div class="graph-link-group">
+      <h3>Connected tasks</h3>
+      ${chipList(area.related_tasks, '/tasks', taskTitle, 'No connected tasks yet.')}
+    </div>
+    <div class="graph-link-group">
+      <h3>Decision anchors</h3>
+      ${chipList(area.related_decisions, '/decisions', decisionTitle, 'No decision anchors yet.')}
+    </div>
+  </div>
+</div>`;
 }
 
 export function projectPage(): string {
-  const cards = DEFAULT_AREAS.map((area) => `<div class="panel"><h3><a href="/areas/${area.id}">${escapeHtml(area.title)}</a></h3><p>${escapeHtml(area.summary)}</p></div>`).join('\n');
-  return pageLayout('Human in the Loop', `<h1>Human in the Loop</h1><p class="muted">Repo-local HTML-native implementation memory for coding-agent workflows.</p><section><h2>Default Areas</h2><div class="grid">${cards}</div></section>`, { type: 'project', areas: DEFAULT_AREAS.map((a) => a.id) });
+  const cards = DEFAULT_AREAS.map((area) => panel(area.title, `/areas/${area.id}`, area.summary)).join('\n');
+  return pageLayout(
+    'Human in the Loop',
+    `<h1>Human in the Loop</h1>
+<p class="muted">Repo-local HTML-native implementation memory for coding-agent workflows.</p>
+<section data-section="default-areas">
+  <h2>Default Areas</h2>
+  <div class="grid">${cards}</div>
+</section>`,
+    { type: 'project', areas: DEFAULT_AREAS.map((area) => area.id) }
+  );
 }
 
 export function graphPage(): string {
-  const nodes = [...DEFAULT_AREAS.map((a) => a.title), ...DEFAULT_TASKS.map((t) => t.title), ...DEFAULT_DECISIONS.map((d) => d.title)]
-    .map((title) => `<div class="panel">${escapeHtml(title)}</div>`).join('\n');
-  return pageLayout('Implementation Memory Graph', `<h1>Implementation Memory Graph</h1><p class="muted">MVP graph: areas, tasks, and decisions as navigable cards.</p><div class="grid">${nodes}</div>`, { type: 'graph' });
+  const areaRows = DEFAULT_AREAS.map((area) => areaGraphRow(area)).join('\n');
+  const taskCards = DEFAULT_TASKS.map((task) => panel(task.title, `/tasks/${task.id}`, task.summary, 'Task', 'task-tag')).join('\n');
+  const decisionCards = DEFAULT_DECISIONS.map((decision) =>
+    panel(decision.title, `/decisions/${decision.id}`, decision.summary, 'Decision', 'decision-tag')
+  ).join('\n');
+  return pageLayout(
+    'Implementation Memory Graph',
+    `<h1>Implementation Memory Graph</h1>
+<p class="muted">Areas, tasks, and decisions as grouped implementation-memory relationships.</p>
+<section class="graph-section" data-section="graph-map">
+  <h2>Area Relationship Map</h2>
+  <div class="graph-map">${areaRows}</div>
+</section>
+<section class="graph-section" data-section="task-entry-points">
+  <h2>Task Entry Points</h2>
+  <div class="graph-mini-grid">${taskCards}</div>
+</section>
+<section class="graph-section" data-section="decision-anchors">
+  <h2>Decision Anchors</h2>
+  <div class="graph-mini-grid">${decisionCards}</div>
+</section>`,
+    { type: 'graph' }
+  );
 }
 
 export function areaPage(area: AreaDefinition): string {
-  const tasks = area.related_tasks.map((id) => `<li><a href="/tasks/${id}">${escapeHtml(id)}</a></li>`).join('') || '<li class="muted">No default task relation.</li>';
-  const decisions = area.related_decisions.map((id) => `<li><a href="/decisions/${id}">${escapeHtml(id)}</a></li>`).join('') || '<li class="muted">No default decision relation.</li>';
-  return pageLayout(area.title, `<h1>${escapeHtml(area.title)}</h1><p>${escapeHtml(area.summary)}</p><section data-section="purpose"><h2>Purpose</h2><p>${escapeHtml(area.summary)}</p></section><section data-section="related-tasks"><h2>Related Tasks</h2><ul>${tasks}</ul></section><section data-section="related-decisions"><h2>Related Decisions</h2><ul>${decisions}</ul></section><section id="recent-memory" data-section="recent-memory"><h2>Recent implementation memory</h2><p class="muted">No finalized implementation memory yet.</p></section><section data-section="open-questions"><h2>Open Questions</h2><p class="muted">No open questions recorded.</p></section><p><a href="/areas/${escapeHtml(area.id)}/agent-context">Agent context</a></p>`, { ...area, type: 'area' });
+  return pageLayout(
+    area.title,
+    `<h1>${escapeHtml(area.title)}</h1>
+<p>${escapeHtml(area.summary)}</p>
+<section data-section="purpose"><h2>Purpose</h2><p>${escapeHtml(area.summary)}</p></section>
+<section data-section="related-tasks"><h2>Related Tasks</h2><ul>${listItems(area.related_tasks, '/tasks')}</ul></section>
+<section data-section="related-decisions"><h2>Related Decisions</h2><ul>${listItems(area.related_decisions, '/decisions')}</ul></section>
+<section id="recent-memory" data-section="recent-memory"><h2>Recent implementation memory</h2><p class="muted">No finalized implementation memory yet.</p></section>
+<section data-section="open-questions"><h2>Open Questions</h2><p class="muted">No open questions recorded.</p></section>
+<p><a href="/areas/${escapeHtml(area.id)}/agent-context">Agent context</a></p>`,
+    { ...area, type: 'area' }
+  );
 }
 
 export function agentContextPage(title: string, summary: string, metadata: unknown): string {
-  return pageLayout(`${title} Agent Context`, `<h1>${escapeHtml(title)} Agent Context</h1><p>${escapeHtml(summary)}</p><p class="muted">Load this page only when routing selects this context.</p>`, metadata);
+  return pageLayout(
+    `${title} Agent Context`,
+    `<h1>${escapeHtml(title)} Agent Context</h1>
+<p>${escapeHtml(summary)}</p>
+<p class="muted">Load this page only when routing selects this context.</p>`,
+    metadata
+  );
 }
 
 export function taskPage(task: TaskDefinition): string {
-  const required = task.required_areas.map((id) => `<li><a href="/areas/${id}">${escapeHtml(id)}</a></li>`).join('');
-  const recommended = task.recommended_areas.map((id) => `<li><a href="/areas/${id}">${escapeHtml(id)}</a></li>`).join('') || '<li class="muted">None.</li>';
-  return pageLayout(task.title, `<h1>${escapeHtml(task.title)}</h1><p>${escapeHtml(task.summary)}</p><section data-section="when-applies"><h2>When this applies</h2><p>${escapeHtml(task.semantic_examples.join('; '))}</p></section><section data-section="required-areas"><h2>Required Areas</h2><ul>${required}</ul></section><section data-section="recommended-areas"><h2>Recommended Areas</h2><ul>${recommended}</ul></section><section data-section="required-notes"><h2>Required Notes</h2><p>Record design decisions, spec interpretations, deviations, tradeoffs, open questions, and stale cleanup.</p></section><p><a href="/tasks/${escapeHtml(task.id)}/agent-context">Agent context</a></p>`, { ...task, type: 'task' });
+  return pageLayout(
+    task.title,
+    `<h1>${escapeHtml(task.title)}</h1>
+<p>${escapeHtml(task.summary)}</p>
+<section data-section="when-applies"><h2>When this applies</h2><p>${escapeHtml(task.semantic_examples.join('; '))}</p></section>
+<section data-section="required-areas"><h2>Required Areas</h2><ul>${listItems(task.required_areas, '/areas')}</ul></section>
+<section data-section="recommended-areas"><h2>Recommended Areas</h2><ul>${listItems(task.recommended_areas, '/areas')}</ul></section>
+<section data-section="required-notes"><h2>Required Notes</h2><p>Record design decisions, spec interpretations, deviations, tradeoffs, open questions, and stale cleanup.</p></section>
+<p><a href="/tasks/${escapeHtml(task.id)}/agent-context">Agent context</a></p>`,
+    { ...task, type: 'task' }
+  );
 }
 
 export function decisionPage(decision: { id: string; title: string; summary: string }): string {
-  return pageLayout(decision.title, `<h1>${escapeHtml(decision.title)}</h1><section data-section="decision"><p>${escapeHtml(decision.summary)}</p></section>`, { ...decision, type: 'decision' });
+  return pageLayout(
+    decision.title,
+    `<h1>${escapeHtml(decision.title)}</h1>
+<section data-section="decision"><p>${escapeHtml(decision.summary)}</p></section>`,
+    { ...decision, type: 'decision' }
+  );
 }
 
 export function simpleIndexPage(title: string, emptyText: string, type: string): string {
-  return pageLayout(title, `<h1>${escapeHtml(title)}</h1><section><p class="muted">${escapeHtml(emptyText)}</p></section>`, { type });
+  return pageLayout(
+    title,
+    `<h1>${escapeHtml(title)}</h1>
+<div class="empty-state"><p>${escapeHtml(emptyText)}</p></div>`,
+    { type }
+  );
 }
